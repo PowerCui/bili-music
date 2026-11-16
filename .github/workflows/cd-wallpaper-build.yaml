@@ -1,4 +1,4 @@
-name: CD Wallpaper Build
+﻿name: CD Wallpaper Build
 
 on:
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
           flutter analyze > analyze.log 2>&1
           code=$?
           echo "analyze exit code: $code"
-          errors=$(grep -E "error • " analyze.log | head -n 10)
+          errors=$(grep -E "error 鈥?" analyze.log | head -n 10)
           if [ -n "$errors" ]; then
             printf '%s\n' "$errors" | while IFS= read -r line; do echo "::error::analyze| $line"; done
             exit 1
@@ -179,7 +179,7 @@ jobs:
         if: steps.androidbuild.outcome == 'failure'
         shell: bash
         run: |
-          grep -E "Error:|error:|error •|e: file|FAILURE:|What went wrong|Execution failed|A problem occurred" android.log | head -n 10 | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
+          grep -E "Error:|error:|error 鈥e: file|FAILURE:|What went wrong|Execution failed|A problem occurred" android.log | head -n 10 | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
 
       - name: Report Android build errors (b)
         if: steps.androidbuild.outcome == 'failure'
@@ -199,3 +199,4 @@ jobs:
           name: bilimusic-cd-wallpaper-android
           path: build/artifacts/*.apk
           retention-days: 30
+

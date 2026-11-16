@@ -10,6 +10,7 @@ import 'package:bilimusic/feature/player/logic/display/player_display_metadata.d
 import 'package:bilimusic/feature/player/logic/display/player_display_provider.dart';
 import 'package:bilimusic/feature/player/logic/lyrics/player_subtitle_controller.dart';
 import 'package:bilimusic/feature/player/logic/player_controller.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'now_playing_provider.g.dart';

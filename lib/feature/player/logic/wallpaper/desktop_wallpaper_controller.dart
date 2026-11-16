@@ -13,6 +13,7 @@ import 'package:bilimusic/feature/player/logic/wallpaper/wallpaper_bridge.dart';
 import 'package:bilimusic/feature/setting/logic/desktop_wallpaper_setting_logic.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'desktop_wallpaper_controller.g.dart';

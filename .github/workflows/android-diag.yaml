@@ -18,6 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
@@ -42,23 +47,11 @@ jobs:
         if: steps.b.outcome == 'failure'
         shell: bash
         run: |
-          sed -n '120,135p' android.log | while IFS= read -r l; do echo "::error::d1| ${l:0:400}"; done
+          tr '\r' '\n' < android.log | grep -A8 "What went wrong" | head -n 10 | while IFS= read -r l; do echo "::error::d1| ${l:0:400}"; done
 
       - name: Dump 2
         if: steps.b.outcome == 'failure'
         shell: bash
         run: |
-          sed -n '136,150p' android.log | while IFS= read -r l; do echo "::error::d2| ${l:0:400}"; done
-
-      - name: Dump 3
-        if: steps.b.outcome == 'failure'
-        shell: bash
-        run: |
-          sed -n '151,165p' android.log | while IFS= read -r l; do echo "::error::d3| ${l:0:400}"; done
-
-      - name: Dump 4
-        if: steps.b.outcome == 'failure'
-        shell: bash
-        run: |
-          awk 'NR>=1 && /rror|FAILED|Caused|Exception|ndk|NDK|Java|java/' android.log | head -n 10 | while IFS= read -r l; do echo "::error::d4| ${l:0:400}"; done
+          tr '\r' '\n' < android.log | grep -n -E "error:|Execution failed|Caused by|Unsupported|major version|Could not|FAILURE:" | head -n 10 | while IFS= read -r l; do echo "::error::d2| ${l:0:400}"; done
           exit 1

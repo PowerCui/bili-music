@@ -152,6 +152,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -179,13 +185,13 @@ jobs:
         if: steps.androidbuild.outcome == 'failure'
         shell: bash
         run: |
-          sed -n '150,159p' android.log | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
+          tr '\r' '\n' < android.log | grep -A8 "What went wrong" | head -n 10 | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
 
       - name: Report Android build errors (b)
         if: steps.androidbuild.outcome == 'failure'
         shell: bash
         run: |
-          sed -n '160,172p' android.log | while IFS= read -r line; do echo "::error::android-b| ${line:0:380}"; done
+          tr '\r' '\n' < android.log | grep -n -E "error:|Execution failed|Caused by|Unsupported|major version|Could not|FAILURE:" | head -n 10 | while IFS= read -r line; do echo "::error::android-b| ${line:0:380}"; done
           exit 1
 
       - name: Rename APK

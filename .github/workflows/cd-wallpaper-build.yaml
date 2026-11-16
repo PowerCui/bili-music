@@ -46,15 +46,36 @@ jobs:
 
       - name: Format check
         continue-on-error: true
-        run: dart format --output=none --set-exit-if-changed lib test
+        shell: bash
+        run: |
+          dart format --output=none --set-exit-if-changed lib test > format.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            while IFS= read -r line; do echo "::error::format| $line"; done < <(head -n 80 format.log)
+          fi
+          exit 0
 
       - name: Analyze
         continue-on-error: true
-        run: flutter analyze
+        shell: bash
+        run: |
+          flutter analyze > analyze.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            while IFS= read -r line; do echo "::error::analyze| $line"; done < <(head -n 120 analyze.log)
+          fi
+          exit 0
 
       - name: Test
         continue-on-error: true
-        run: flutter test
+        shell: bash
+        run: |
+          flutter test > test.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            while IFS= read -r line; do echo "::error::test| $line"; done < <(grep -E "\[E\]|Some tests failed|Expected:|Actual:" test.log | head -n 80)
+          fi
+          exit 0
 
   build-windows:
     name: Build Windows Installer
@@ -79,7 +100,14 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Build Windows
-        run: flutter build windows --release
+        shell: pwsh
+        run: |
+          flutter build windows --release 2>&1 | Tee-Object -FilePath build-windows.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Get-Content build-windows.log -Tail 120 | ForEach-Object { Write-Output "::error::winbuild| $_" }
+            exit 1
+          }
 
       - name: Setup Inno Setup
         run: choco install innosetup --no-progress -y
@@ -120,7 +148,14 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Build Android APK
-        run: flutter build apk --debug
+        shell: bash
+        run: |
+          flutter build apk --debug > android.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            tail -n 120 android.log | while IFS= read -r line; do echo "::error::android| $line"; done
+            exit 1
+          fi
 
       - name: Rename APK
         run: |

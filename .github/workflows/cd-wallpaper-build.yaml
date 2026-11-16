@@ -1,4 +1,4 @@
-﻿name: CD Wallpaper Build
+name: CD Wallpaper Build
 
 on:
   workflow_dispatch:
@@ -179,7 +179,7 @@ jobs:
         if: steps.androidbuild.outcome == 'failure'
         shell: bash
         run: |
-          grep -E "Error:|error:|error 鈥e: file|FAILURE:|What went wrong|Execution failed|A problem occurred" android.log | head -n 10 | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
+          grep -E -A4 "What went wrong:" android.log | head -n 10 | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
 
       - name: Report Android build errors (b)
         if: steps.androidbuild.outcome == 'failure'

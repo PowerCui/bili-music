@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -183,7 +183,7 @@ class LocalBridgeServer {
       await response.close();
       return;
     }
-    response.headers.contentType = ContentType('image', entry.mimeType);
+    response.headers.contentType = ContentType.parse(entry.mimeType);
     response.add(entry.bytes);
     await response.close();
   }
@@ -206,9 +206,10 @@ class LocalBridgeServer {
         Uint8List(0),
         (Uint8List buffer, List<int> chunk) => buffer..addAll(chunk),
       );
+      final String upstreamMime = source.headers.contentType?.mimeType ?? '';
       final _CoverEntry entry = _CoverEntry(
         bytes,
-        source.contentType?.mimeType ?? 'jpeg',
+        upstreamMime.contains('/') ? upstreamMime : 'image/jpeg',
       );
       if (_coverCache.length >= 8) {
         _coverCache.remove(_coverCache.keys.first);
@@ -242,7 +243,7 @@ class LocalBridgeServer {
 
       final String artist = _readArtist(container, item);
       final String? coverUrl = _readCoverUrl(container, item);
-      final String lyrics = _readLyrics(container, item);
+      final _LyricsPayload lyrics = _readLyrics(container, item);
       final int lyricsOffsetMs = _readLyricsOffsetMs(container, item);
       final Duration? duration = player.duration;
 

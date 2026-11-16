@@ -3,6 +3,7 @@ import 'dart:ui' show AppExitResponse;
 
 import 'package:bilimusic/common/util/platform_util.dart';
 import 'package:bilimusic/core/bili/session/bili_session_controller.dart';
+import 'package:bilimusic/core/bridge/local_bridge_server.dart';
 import 'package:bilimusic/core/hive/hive.dart';
 import 'package:bilimusic/core/theme/desktop_chinese_font.dart';
 import 'package:bilimusic/core/window/desktop_app_lifecycle.dart';
@@ -37,6 +38,9 @@ Future<DesktopAppLifecycle?> bootstrap(ProviderContainer container) async {
   );
 
   if (PlatformUtil.isDesktop) {
+    // 本地桥接：让 Wallpaper Engine 之类的程序能取到当前曲目的封面和歌词。
+    // 失败不影响播放器本身，只是桥接不可用。
+    await LocalBridgeServer.instance.start(container);
     return DesktopAppLifecycle.initialize(container);
   }
   return null;

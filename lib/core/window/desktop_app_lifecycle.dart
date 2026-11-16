@@ -1,3 +1,4 @@
+import 'package:bilimusic/core/bridge/local_bridge_server.dart';
 import 'package:bilimusic/core/hive/hive_keys.dart';
 import 'package:bilimusic/core/window/desktop_hotkey_controller.dart';
 import 'package:bilimusic/core/window/desktop_tray_controller.dart';
@@ -65,6 +66,7 @@ class DesktopAppLifecycle {
     _isShuttingDown = true;
 
     await _tryShutdownPlayer();
+    await _tryStopLocalBridge();
     await _tryDetachHotkeys();
     await _trySaveAndDetachWindowState();
     _tryDisposeProviders();
@@ -116,6 +118,14 @@ class DesktopAppLifecycle {
       await _container.read(playerControllerProvider.notifier).shutdown();
     } on Object {
       // Continue shutting down even if the player fails to release cleanly.
+    }
+  }
+
+  Future<void> _tryStopLocalBridge() async {
+    try {
+      await LocalBridgeServer.instance.stop();
+    } on Object {
+      // Ignore bridge cleanup failures during process shutdown.
     }
   }
 

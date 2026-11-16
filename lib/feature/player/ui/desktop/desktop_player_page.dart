@@ -29,6 +29,7 @@ import 'package:bilimusic/feature/player/logic/display/player_display_source_log
 import 'package:bilimusic/feature/player/ui/desktop/components/play_pause_button.dart';
 import 'package:bilimusic/feature/player/ui/desktop/components/quality_attach.dart';
 import 'package:bilimusic/feature/player/ui/desktop/components/queue_mode_attach.dart';
+import 'package:bilimusic/feature/player/ui/desktop/components/desktop_cd_artwork.dart';
 import 'package:bilimusic/feature/player/ui/components/player_collection_sheet.dart';
 import 'package:bilimusic/feature/player/logic/display/player_display_metadata.dart';
 import 'package:bilimusic/feature/player/ui/components/player_dynamic_backdrop.dart';
@@ -437,7 +438,7 @@ class _DesktopPlayerTopBarState extends State<_DesktopPlayerTopBar>
   }
 }
 
-class _DesktopPlayerHeroSection extends StatelessWidget {
+class _DesktopPlayerHeroSection extends StatefulWidget {
   const _DesktopPlayerHeroSection({
     required this.state,
     required this.item,
@@ -457,6 +458,14 @@ class _DesktopPlayerHeroSection extends StatelessWidget {
   final Color? activeColor;
 
   @override
+  State<_DesktopPlayerHeroSection> createState() =>
+      _DesktopPlayerHeroSectionState();
+}
+
+class _DesktopPlayerHeroSectionState extends State<_DesktopPlayerHeroSection> {
+  bool _cdMode = false;
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -470,6 +479,19 @@ class _DesktopPlayerHeroSection extends StatelessWidget {
           560.0,
         );
 
+        final Widget artwork = _cdMode
+            ? DesktopCdArtwork(
+                coverUrl: widget.display.coverUrl ?? '',
+                isPlaying: widget.state.isPlaying,
+                size: artworkSize,
+              )
+            : GestureDetector(
+                onDoubleTap: widget.display.canToggleSource
+                    ? widget.onToggleSource
+                    : null,
+                child: _DesktopArtwork(coverUrl: widget.display.coverUrl),
+              );
+
         return Center(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(80, 8, 0, 12),
@@ -480,11 +502,18 @@ class _DesktopPlayerHeroSection extends StatelessWidget {
                 SizedBox(
                   width: artworkSize,
                   height: artworkSize,
-                  child: GestureDetector(
-                    onDoubleTap: display.canToggleSource
-                        ? onToggleSource
-                        : null,
-                    child: _DesktopArtwork(coverUrl: display.coverUrl),
+                  child: Stack(
+                    children: <Widget>[
+                      Positioned.fill(child: artwork),
+                      Positioned(
+                        right: 8,
+                        bottom: 8,
+                        child: _CdModeButton(
+                          cdMode: _cdMode,
+                          onPressed: () => setState(() => _cdMode = !_cdMode),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 SizedBox(width: contentGap),
@@ -498,13 +527,13 @@ class _DesktopPlayerHeroSection extends StatelessWidget {
                           child: SizedBox(
                             height: 360,
                             child: PlayerLyricPanel(
-                              state: state,
-                              item: item,
+                              state: widget.state,
+                              item: widget.item,
                               isActive: true,
-                              onSeek: onSeek,
-                              activeColor: activeColor,
+                              onSeek: widget.onSeek,
+                              activeColor: widget.activeColor,
                               variant: PlayerLyricPanelVariant.desktop,
-                              showTranslation: showTranslation,
+                              showTranslation: widget.showTranslation,
                             ),
                           ),
                         ),
@@ -517,6 +546,28 @@ class _DesktopPlayerHeroSection extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _CdModeButton extends StatelessWidget {
+  const _CdModeButton({required this.cdMode, required this.onPressed});
+
+  final bool cdMode;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      color: colorScheme.surface.withValues(alpha: 0.88),
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: cdMode ? '封面模式' : '唱片模式',
+        onPressed: onPressed,
+        color: colorScheme.onSurface,
+        icon: Icon(cdMode ? Icons.image_rounded : Icons.album_rounded),
+      ),
     );
   }
 }

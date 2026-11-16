@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:bilimusic/common/logger.dart';
 import 'package:bilimusic/core/bridge/bridge_protocol.dart';
 import 'package:bilimusic/core/bridge/bridge_snapshot.dart';
+import 'package:bilimusic/core/net/net_config.dart';
 import 'package:bilimusic/feature/metadata/domain/metadata.dart';
 import 'package:bilimusic/feature/metadata/logic/metadata_controller.dart';
 import 'package:bilimusic/feature/player/domain/bili_subtitle.dart';
@@ -21,7 +22,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 ///
 /// 只监听 127.0.0.1，数据接口要带令牌。
 class LocalBridgeServer {
-  LocalBridgeServer._();
+  LocalBridgeServer._() {
+    _httpClient
+      ..userAgent = NetConfig.defaultHeaders['User-Agent'] as String
+      ..connectionTimeout = const Duration(seconds: 10);
+  }
 
   static final LocalBridgeServer instance = LocalBridgeServer._();
 
@@ -196,6 +201,11 @@ class LocalBridgeServer {
     try {
       final HttpClientRequest request = await _httpClient.getUrl(
         Uri.parse(url),
+      );
+      // B 站图床对空 Referer 的请求容易 403，跟播放器内部保持一致。
+      request.headers.set(
+        HttpHeaders.refererHeader,
+        NetConfig.defaultHeaders['Referer'] as String,
       );
       final HttpClientResponse source = await request.close();
       if (source.statusCode != HttpStatus.ok) {

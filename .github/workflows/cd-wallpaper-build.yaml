@@ -105,7 +105,10 @@ jobs:
           flutter build windows --release 2>&1 | Tee-Object -FilePath build-windows.log
           $code = $LASTEXITCODE
           if ($code -ne 0) {
-            Get-Content build-windows.log -Tail 120 | ForEach-Object { Write-Output "::error::winbuild| $_" }
+            Get-Content build-windows.log |
+              Select-String -Pattern 'error C[0-9]{4}|error LNK|CMake Error|FAILED:|Error:|error •|BUILD FAILED|What went wrong|ninja: build stopped|Exception' |
+              Select-Object -First 10 |
+              ForEach-Object { Write-Output "::error::winbuild| $($_.Line.Trim())" }
             exit 1
           }
 
@@ -153,7 +156,7 @@ jobs:
           flutter build apk --debug > android.log 2>&1
           code=$?
           if [ $code -ne 0 ]; then
-            tail -n 120 android.log | while IFS= read -r line; do echo "::error::android| $line"; done
+            grep -E "Error:|error:|error •|e: file|FAILURE|What went wrong|BUILD FAILED|Execution failed" android.log | head -n 10 | while IFS= read -r line; do echo "::error::android| ${line:0:400}"; done
             exit 1
           fi
 

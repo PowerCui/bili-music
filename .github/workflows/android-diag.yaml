@@ -1,0 +1,64 @@
+name: Android Diag
+
+on:
+  push:
+    branches:
+      - feat/cd-wallpaper
+    paths:
+      - ".github/workflows/android-diag.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android Diag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: "3.44.0"
+          architecture: "x64"
+          cache: true
+
+      - run: flutter pub get
+
+      - run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build
+        id: b
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          flutter build apk --debug --flavor production > android.log 2>&1
+          exit $?
+
+      - name: Dump 1
+        if: steps.b.outcome == 'failure'
+        shell: bash
+        run: |
+          sed -n '120,135p' android.log | while IFS= read -r l; do echo "::error::d1| ${l:0:400}"; done
+
+      - name: Dump 2
+        if: steps.b.outcome == 'failure'
+        shell: bash
+        run: |
+          sed -n '136,150p' android.log | while IFS= read -r l; do echo "::error::d2| ${l:0:400}"; done
+
+      - name: Dump 3
+        if: steps.b.outcome == 'failure'
+        shell: bash
+        run: |
+          sed -n '151,165p' android.log | while IFS= read -r l; do echo "::error::d3| ${l:0:400}"; done
+
+      - name: Dump 4
+        if: steps.b.outcome == 'failure'
+        shell: bash
+        run: |
+          awk 'NR>=1 && /rror|FAILED|Caused|Exception|ndk|NDK|Java|java/' android.log | head -n 10 | while IFS= read -r l; do echo "::error::d4| ${l:0:400}"; done
+          exit 1

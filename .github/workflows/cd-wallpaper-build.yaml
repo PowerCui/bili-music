@@ -179,13 +179,13 @@ jobs:
         if: steps.androidbuild.outcome == 'failure'
         shell: bash
         run: |
-          awk '/What went wrong/{flag=1} flag{print; n++} n>9{exit}' android.log | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
+          sed -n '150,159p' android.log | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
 
       - name: Report Android build errors (b)
         if: steps.androidbuild.outcome == 'failure'
         shell: bash
         run: |
-          grep -n -E "FAILURE:|error:|Caused by|> Task .*FAILED|SDK|NDK|ndk|AGP|Gradle|plugin" android.log | head -n 10 | while IFS= read -r line; do echo "::error::android-b| ${line:0:380}"; done
+          sed -n '160,172p' android.log | while IFS= read -r line; do echo "::error::android-b| ${line:0:380}"; done
           exit 1
 
       - name: Rename APK

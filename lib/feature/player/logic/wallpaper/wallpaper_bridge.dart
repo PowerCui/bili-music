@@ -1,7 +1,4 @@
-import 'dart:typed_data';
-
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart' show VoidCallback;
 
 typedef WallpaperControlHandler = void Function(Map<Object?, Object?> arguments);
 typedef WallpaperStateHandler =

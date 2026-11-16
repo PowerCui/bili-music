@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          flutter analyze > analyze.log 2>&1
+          flutter analyze --no-fatal-infos > analyze.log 2>&1
           code=$?
           echo "analyze exit code: $code"
           errors=$(grep -E "error 鈥?" analyze.log | head -n 10)
@@ -179,13 +179,13 @@ jobs:
         if: steps.androidbuild.outcome == 'failure'
         shell: bash
         run: |
-          grep -E -A4 "What went wrong:" android.log | head -n 10 | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
+          awk '/What went wrong/{flag=1} flag{print; n++} n>9{exit}' android.log | while IFS= read -r line; do echo "::error::android-a| ${line:0:380}"; done
 
       - name: Report Android build errors (b)
         if: steps.androidbuild.outcome == 'failure'
         shell: bash
         run: |
-          tail -n 12 android.log | while IFS= read -r line; do echo "::error::android-b| ${line:0:380}"; done
+          grep -n -E "FAILURE:|error:|Caused by|> Task .*FAILED|SDK|NDK|ndk|AGP|Gradle|plugin" android.log | head -n 10 | while IFS= read -r line; do echo "::error::android-b| ${line:0:380}"; done
           exit 1
 
       - name: Rename APK

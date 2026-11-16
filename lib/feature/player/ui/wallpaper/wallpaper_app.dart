@@ -50,12 +50,11 @@ class _WallpaperAppState extends State<WallpaperApp> {
   }
 
   void _sendControl(String type, {double? positionMs}) {
-    unawaited(
-      WallpaperViewBridge.sendControl(<String, Object?>{
-        'type': type,
-        if (positionMs != null) 'positionMs': positionMs,
-      }),
-    );
+    final Map<String, Object?> arguments = <String, Object?>{'type': type};
+    if (positionMs != null) {
+      arguments['positionMs'] = positionMs;
+    }
+    unawaited(WallpaperViewBridge.sendControl(arguments));
   }
 
   @override

@@ -62,17 +62,19 @@ class _DesktopWallpaperPageState extends ConsumerState<DesktopWallpaperPage> {
               child: Text('显示器', style: theme.textTheme.titleSmall),
             ),
             for (final WallpaperMonitor monitor in _monitors)
-              RadioListTile<int>(
+              ListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                value: monitor.index,
-                groupValue: settings.monitorIndex,
                 title: Text(monitor.label),
-                onChanged: (int? value) {
-                  if (value != null) {
-                    logic.setMonitorIndex(value);
-                  }
-                },
+                trailing: Icon(
+                  settings.monitorIndex == monitor.index
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: settings.monitorIndex == monitor.index
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                onTap: () => logic.setMonitorIndex(monitor.index),
               ),
           ],
           if (settings.enabled && _loading)

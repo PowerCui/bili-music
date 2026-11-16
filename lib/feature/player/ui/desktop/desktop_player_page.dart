@@ -18,6 +18,9 @@ import 'package:bilimusic/feature/player/domain/audio_stream_info.dart';
 import 'package:bilimusic/feature/player/domain/playable_item.dart';
 import 'package:bilimusic/feature/player/domain/player_state.dart';
 import 'package:bilimusic/feature/player/domain/player_subtitle_state.dart';
+import 'package:bilimusic/feature/player/domain/player_view_mode.dart';
+import 'package:bilimusic/feature/player/logic/player_view_mode_logic.dart';
+import 'package:bilimusic/feature/player/ui/cd/cd_player_content.dart';
 import 'package:bilimusic/feature/player/logic/lyrics/player_subtitle_controller.dart';
 import 'package:bilimusic/feature/player/logic/lyrics/desktop_lyrics_controller.dart';
 import 'package:bilimusic/feature/player/logic/lyrics/player_lyric_settings_logic.dart';
@@ -136,6 +139,17 @@ class _DesktopPlayerPageState extends ConsumerState<DesktopPlayerPage> {
     final bool isDesktopLyricsEnabled = ref.watch(
       desktopLyricsControllerProvider,
     );
+    final PlayerViewMode viewMode = ref.watch(playerViewModeLogicProvider);
+
+    if (viewMode == PlayerViewMode.cd) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF07090C),
+        body: CdPlayerContent(
+          onExitCdMode: () =>
+              ref.read(playerViewModeLogicProvider.notifier).toggle(),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -197,6 +211,11 @@ class _DesktopPlayerPageState extends ConsumerState<DesktopPlayerPage> {
               children: <Widget>[
                 _DesktopPlayerTopBar(
                   onBack: () => Navigator.of(context).maybePop(),
+                  onToggleCdMode: item == null
+                      ? null
+                      : () => ref
+                            .read(playerViewModeLogicProvider.notifier)
+                            .toggle(),
                 ),
                 Expanded(
                   child: _DesktopPlayerHeroSection(
@@ -313,9 +332,10 @@ class _DesktopPlayerPageState extends ConsumerState<DesktopPlayerPage> {
 }
 
 class _DesktopPlayerTopBar extends StatefulWidget {
-  const _DesktopPlayerTopBar({required this.onBack});
+  const _DesktopPlayerTopBar({required this.onBack, this.onToggleCdMode});
 
   final VoidCallback onBack;
+  final VoidCallback? onToggleCdMode;
 
   @override
   State<_DesktopPlayerTopBar> createState() => _DesktopPlayerTopBarState();
@@ -375,6 +395,16 @@ class _DesktopPlayerTopBarState extends State<_DesktopPlayerTopBar>
                   ),
                 ),
                 const Spacer(),
+                if (widget.onToggleCdMode != null)
+                  Tooltip(
+                    waitDuration: const Duration(seconds: 1),
+                    message: '光盘视图',
+                    child: BarIconButton(
+                      icon: Icons.album_outlined,
+                      iconSize: 20,
+                      onPressed: widget.onToggleCdMode,
+                    ),
+                  ),
                 // macOS 已经自带交通灯按钮，避免重复绘制窗口操作按钮。
                 if (!PlatformUtil.isMacOS) ...[
                   Tooltip(

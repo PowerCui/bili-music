@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <utility>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -14,12 +15,31 @@ constexpr int kPreviousGlyph = 0;
 constexpr int kPlayGlyph = 1;
 constexpr int kPauseGlyph = 2;
 constexpr int kNextGlyph = 3;
+constexpr char kDesktopWallpaperChannel[] = "bilimusic/desktop_wallpaper";
+constexpr UINT kWallpaperWindowClosedMessage = WM_APP + 1;
 
 bool ReadBool(const flutter::EncodableMap& arguments, const char* key) {
   const auto iterator = arguments.find(flutter::EncodableValue(key));
   return iterator != arguments.end() &&
          std::holds_alternative<bool>(iterator->second) &&
          std::get<bool>(iterator->second);
+}
+
+bool ReadInt(const flutter::EncodableMap& arguments, const char* key,
+             int* value) {
+  const auto iterator = arguments.find(flutter::EncodableValue(key));
+  if (iterator == arguments.end()) {
+    return false;
+  }
+  if (std::holds_alternative<int32_t>(iterator->second)) {
+    *value = std::get<int32_t>(iterator->second);
+    return true;
+  }
+  if (std::holds_alternative<int64_t>(iterator->second)) {
+    *value = static_cast<int>(std::get<int64_t>(iterator->second));
+    return true;
+  }
+  return false;
 }
 }  // namespace
 
@@ -66,6 +86,16 @@ bool FlutterWindow::OnCreate() {
         UpdateTaskbarThumbnailToolbar();
         result->Success();
       });
+  wallpaper_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), kDesktopWallpaperChannel,
+          &flutter::StandardMethodCodec::GetInstance());
+  wallpaper_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        HandleWallpaperMethodCall(call, std::move(result));
+      });
   InitializeTaskbarThumbnailToolbar();
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
@@ -82,6 +112,8 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  HideWallpaper();
+  wallpaper_channel_.reset();
   ReleaseTaskbarThumbnailToolbar();
   taskbar_channel_.reset();
   if (flutter_controller_) {
@@ -98,6 +130,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   if (message == taskbar_button_created_message_) {
     taskbar_toolbar_added_ = false;
     UpdateTaskbarThumbnailToolbar();
+    return 0;
+  }
+
+  if (message == kWallpaperWindowClosedMessage) {
+    HandleWallpaperWindowClosed();
     return 0;
   }
 
@@ -277,5 +314,186 @@ void FlutterWindow::ReleaseTaskbarThumbnailToolbar() {
   if (taskbar_com_initialized_) {
     CoUninitialize();
     taskbar_com_initialized_ = false;
+  }
+}
+
+void FlutterWindow::HandleWallpaperMethodCall(
+    const flutter::MethodCall<flutter::EncodableValue>& call,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const std::string& method = call.method_name();
+  if (method == "show") {
+    bool shown = false;
+    if (call.arguments() &&
+        std::holds_alternative<flutter::EncodableMap>(*call.arguments())) {
+      int monitor_index = 0;
+      if (ReadInt(std::get<flutter::EncodableMap>(*call.arguments()),
+                  "monitorIndex", &monitor_index)) {
+        shown = ShowWallpaper(monitor_index);
+      }
+    }
+    result->Success(flutter::EncodableValue(shown));
+    return;
+  }
+
+  if (method == "hide") {
+    HideWallpaper();
+    result->Success(flutter::EncodableValue(true));
+    return;
+  }
+
+  if (method == "pushState") {
+    if (call.arguments() &&
+        std::holds_alternative<flutter::EncodableMap>(*call.arguments())) {
+      PushWallpaperState(std::get<flutter::EncodableMap>(*call.arguments()));
+    }
+    result->Success();
+    return;
+  }
+
+  if (method == "listMonitors") {
+    flutter::EncodableList monitors;
+    const std::vector<WallpaperWindow::MonitorEntry> entries =
+        WallpaperWindow::EnumerateMonitors();
+    int index = 0;
+    for (const WallpaperWindow::MonitorEntry& entry : entries) {
+      flutter::EncodableMap monitor;
+      monitor[flutter::EncodableValue("index")] =
+          flutter::EncodableValue(index);
+      monitor[flutter::EncodableValue("width")] = flutter::EncodableValue(
+          static_cast<int>(entry.bounds.right - entry.bounds.left));
+      monitor[flutter::EncodableValue("height")] = flutter::EncodableValue(
+          static_cast<int>(entry.bounds.bottom - entry.bounds.top));
+      monitor[flutter::EncodableValue("primary")] =
+          flutter::EncodableValue(entry.primary);
+      monitors.push_back(flutter::EncodableValue(monitor));
+      ++index;
+    }
+    result->Success(flutter::EncodableValue(monitors));
+    return;
+  }
+
+  result->NotImplemented();
+}
+
+bool FlutterWindow::ShowWallpaper(int monitor_index) {
+  DestroyWallpaperWindow();
+
+  flutter::DartProject wallpaper_project(project_);
+  wallpaper_project.set_dart_entrypoint("wallpaperMain");
+
+  const RECT bounds = WallpaperWindow::MonitorBounds(monitor_index);
+  auto window = std::make_unique<WallpaperWindow>(
+      wallpaper_project, bounds, [this]() { OnWallpaperReady(); },
+      [this](const flutter::EncodableMap& arguments) {
+        OnWallpaperControl(arguments);
+      },
+      [this]() { OnWallpaperClosed(); });
+
+  if (!window->Create(
+          L"bilimusic wallpaper", Win32Window::Point(0, 0),
+          Win32Window::Size(
+              static_cast<unsigned int>(bounds.right - bounds.left),
+              static_cast<unsigned int>(bounds.bottom - bounds.top)))) {
+    window->Destroy();
+    return false;
+  }
+  window->SetQuitOnClose(false);
+
+  wallpaper_window_ = std::move(window);
+  SendCachedWallpaperState();
+  return true;
+}
+
+void FlutterWindow::HideWallpaper() {
+  DestroyWallpaperWindow();
+  ResetWallpaperState();
+}
+
+void FlutterWindow::DestroyWallpaperWindow() {
+  if (!wallpaper_window_) {
+    wallpaper_ready_ = false;
+    return;
+  }
+  destroying_wallpaper_ = true;
+  wallpaper_window_->Destroy();
+  wallpaper_window_.reset();
+  destroying_wallpaper_ = false;
+  wallpaper_ready_ = false;
+}
+
+void FlutterWindow::PushWallpaperState(
+    const flutter::EncodableMap& arguments) {
+  wallpaper_has_state_ = false;
+  wallpaper_cover_present_ = false;
+  wallpaper_payload_.clear();
+  wallpaper_cover_.clear();
+
+  const auto payload = arguments.find(flutter::EncodableValue("payload"));
+  if (payload != arguments.end() &&
+      std::holds_alternative<std::string>(payload->second)) {
+    wallpaper_payload_ = std::get<std::string>(payload->second);
+    wallpaper_has_state_ = true;
+  }
+
+  const auto cover = arguments.find(flutter::EncodableValue("cover"));
+  if (cover != arguments.end() &&
+      std::holds_alternative<std::vector<uint8_t>>(cover->second)) {
+    wallpaper_cover_ = std::get<std::vector<uint8_t>>(cover->second);
+    wallpaper_cover_present_ = true;
+  }
+
+  SendCachedWallpaperState();
+}
+
+void FlutterWindow::SendCachedWallpaperState() {
+  if (!wallpaper_window_ || !wallpaper_ready_ || !wallpaper_has_state_) {
+    return;
+  }
+  wallpaper_window_->SendState(
+      wallpaper_payload_,
+      wallpaper_cover_present_ ? &wallpaper_cover_ : nullptr);
+}
+
+void FlutterWindow::ResetWallpaperState() {
+  wallpaper_has_state_ = false;
+  wallpaper_cover_present_ = false;
+  wallpaper_payload_.clear();
+  wallpaper_cover_.clear();
+  wallpaper_ready_ = false;
+}
+
+void FlutterWindow::OnWallpaperReady() {
+  wallpaper_ready_ = true;
+  SendCachedWallpaperState();
+}
+
+void FlutterWindow::OnWallpaperControl(
+    const flutter::EncodableMap& arguments) {
+  if (!wallpaper_channel_) {
+    return;
+  }
+  wallpaper_channel_->InvokeMethod(
+      "control", std::make_unique<flutter::EncodableValue>(arguments));
+}
+
+void FlutterWindow::OnWallpaperClosed() {
+  HWND handle = GetHandle();
+  if (destroying_wallpaper_ || handle == nullptr) {
+    return;
+  }
+  ::PostMessage(handle, kWallpaperWindowClosedMessage, 0, 0);
+}
+
+void FlutterWindow::HandleWallpaperWindowClosed() {
+  if (!wallpaper_window_) {
+    return;
+  }
+  destroying_wallpaper_ = true;
+  wallpaper_window_.reset();
+  destroying_wallpaper_ = false;
+  ResetWallpaperState();
+  if (wallpaper_channel_) {
+    wallpaper_channel_->InvokeMethod(
+        "windowClosed", std::make_unique<flutter::EncodableValue>());
   }
 }

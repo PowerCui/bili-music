@@ -28,6 +28,9 @@ class HiveKeys {
   static const String favoritesListViewMode = 'favorites.list_view_mode';
   static const String desktopHotkeys = 'desktop.hotkeys';
   static const String desktopLyricsEnabled = 'desktop.lyrics.enabled';
+  static const String desktopWallpaperEnabled = 'desktop.wallpaper.enabled';
+  static const String desktopWallpaperMonitor = 'desktop.wallpaper.monitor';
+  static const String playerViewMode = 'player.view_mode';
   static const String webDavBaseUrl = 'webdav.base_url';
   static const String webDavUsername = 'webdav.username';
   static const String webDavPassword = 'webdav.password';

@@ -10,8 +10,12 @@ import 'package:bilimusic/feature/player/domain/player_state.dart';
 import 'package:bilimusic/feature/player/domain/playback_chapter.dart';
 import 'package:bilimusic/feature/player/logic/player_controller.dart';
 import 'package:bilimusic/feature/player/domain/player_display_info.dart';
+import 'package:bilimusic/feature/player/domain/player_view_mode.dart';
 import 'package:bilimusic/feature/player/logic/display/player_display_provider.dart';
 import 'package:bilimusic/feature/player/logic/display/player_display_source_logic.dart';
+import 'package:bilimusic/feature/player/logic/player_view_mode_logic.dart';
+import 'package:bilimusic/feature/player/ui/cd/cd_player_content.dart';
+import 'package:bilimusic/feature/player/ui/cd/cd_view_mode_button.dart';
 import 'package:bilimusic/feature/player/logic/display/player_cover_color_provider.dart';
 import 'package:bilimusic/feature/player/ui/components/player_dynamic_backdrop.dart';
 import 'package:bilimusic/feature/player/ui/components/player_landscape_page.dart';
@@ -106,6 +110,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colorScheme = theme.colorScheme;
     final Color? coverColor = ref.watch(playerCoverColorControllerProvider);
+    final PlayerViewMode viewMode = ref.watch(playerViewModeLogicProvider);
+
+    if (viewMode == PlayerViewMode.cd) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF07090C),
+        body: CdPlayerContent(
+          onExitCdMode: () =>
+              ref.read(playerViewModeLogicProvider.notifier).toggle(),
+        ),
+      );
+    }
 
     if (MediaQuery.orientationOf(context) == Orientation.landscape) {
       return Scaffold(
@@ -151,6 +166,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                       onOpenMenu: item == null
                           ? null
                           : () => _showPlayerMenu(item),
+                      actions: <Widget>[
+                        if (item != null) const CdViewModeButton(),
+                      ],
                     ),
                     const SizedBox(height: 18),
                     Expanded(

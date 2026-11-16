@@ -8,11 +8,13 @@ class PlayerTopBar extends StatelessWidget {
     required this.currentPage,
     required this.onBack,
     required this.onOpenMenu,
+    this.actions = const <Widget>[],
   });
 
   final int currentPage;
   final VoidCallback onBack;
   final VoidCallback? onOpenMenu;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +30,7 @@ class PlayerTopBar extends StatelessWidget {
           Expanded(
             child: Center(child: PlayerPageIndicator(currentPage: currentPage)),
           ),
+          ...actions,
           IconButton(
             key: const Key('playerMenuButton'),
             onPressed: onOpenMenu,

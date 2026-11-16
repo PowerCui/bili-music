@@ -18,6 +18,7 @@ import 'package:bilimusic/feature/statistics/ui/song_statistics_page.dart';
 import 'package:bilimusic/core/layout/app_layout.dart';
 import 'package:bilimusic/feature/setting/ui/about_settings_page.dart';
 import 'package:bilimusic/feature/setting/ui/cache_settings_page.dart';
+import 'package:bilimusic/feature/setting/ui/desktop_wallpaper_page.dart';
 import 'package:bilimusic/feature/setting/ui/app_transfer_page.dart';
 import 'package:bilimusic/feature/setting/ui/hotkey_settings_page.dart';
 import 'package:bilimusic/feature/setting/ui/player_settings_page.dart';
@@ -215,6 +216,10 @@ final List<Map<String, dynamic>> mobileHiddenBranches = [
         builder: (context, state) => const HotkeySettingsPage(),
       ),
       GoRoute(
+        path: 'wallpaper',
+        builder: (context, state) => const DesktopWallpaperPage(),
+      ),
+      GoRoute(
         path: 'about',
         builder: (context, state) => const AboutSettingsPage(),
       ),
@@ -263,6 +268,10 @@ final List<Map<String, dynamic>> desktopTabs = [
       GoRoute(
         path: 'hotkeys',
         builder: (context, state) => const HotkeySettingsPage(),
+      ),
+      GoRoute(
+        path: 'wallpaper',
+        builder: (context, state) => const DesktopWallpaperPage(),
       ),
       GoRoute(
         path: 'about',

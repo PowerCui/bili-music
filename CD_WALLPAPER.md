@@ -64,9 +64,17 @@ playerControllerProvider (PlayableItem / duration / queueSourceLabel / playback)
 
 ## 验证方式
 
-本机不具备 Flutter 工具链，全部验证在 GitHub Actions（`.github/workflows/cd-wallpaper-build.yaml`）中完成：`build_runner`（生成 `*.g.dart`/`*.freezed.dart`，本仓库不跟踪新生成物）→ `dart format` 检查与 `flutter analyze`（记录用，不阻塞）→ `flutter test`（非阻塞）→ Windows release 打包 innosetup → Android debug APK。
+本机不具备 Flutter 工具链，全部验证在 GitHub Actions（`.github/workflows/cd-wallpaper-build.yaml`）中完成，三个 job 并行/串行如下：
+
+- `Analyze & Test`（ubuntu）：`flutter pub get` → `dart run build_runner build --delete-conflicting-outputs` → `dart format` 检查（记录用）→ `flutter analyze --no-fatal-infos`（**门禁**）→ `flutter test`（记录用）。
+- `Build Windows Installer`（windows-latest，需 `verify` 通过）：`build_runner` → `flutter build windows --release` → innosetup 打包并上传 artifact `bilimusic-cd-wallpaper-windows`。
+- `Build Android APK`（ubuntu，需 `verify` 通过，`setup-java` 固定 Temurin **JDK 17**）：`build_runner` → `flutter build apk --debug --flavor production` → 上传 artifact `bilimusic-cd-wallpaper-android`（不回归验证）。
 
 三个 job 都会先跑 `dart run build_runner build --delete-conflicting-outputs`，因此新增的注解类（`now_playing`、`now_playing_provider`、`player_view_mode_logic`、`desktop_wallpaper_setting_logic`、`desktop_wallpaper_controller`）不需要在本地提交生成文件即可编译通过；若希望本地也保留生成物，执行同一条命令后再一并提交即可。
+
+> 说明：Android 构建必须使用 JDK 17；GitHub 的 `ubuntu-latest` 默认 JDK 版本过高会让 Gradle 8.x 编译失败（现象为 `assembleProductionDebug failed`，日志里伴随 `restricted method in java.lang.System` 警告），因此 CI 显式安装 JDK 17。
+
+实测结果（本轮 CI）：`Analyze & Test`、`Build Windows Installer`、`Build Android APK` 全部通过，Windows 安装包与 Android debug APK 均作为 artifact 产出。**运行时效果（桌面图标下层是否出现光盘、点击是否可操作、切歌同步）需在 Windows 真机安装后验证**，因为本机没有 Flutter/VS 工具链，无法本地运行。
 
 ## 已知限制
 

@@ -1,4 +1,4 @@
-name: Flutter Test Build
+﻿name: Flutter Test Build
 
 on:
   workflow_dispatch:
@@ -58,11 +58,6 @@ jobs:
 
       - name: Flutter Pub Get
         run: flutter pub get
-
-      - name: Setup keystore
-        run: |
-          echo '${{ secrets.KEYSTORE }}' | base64 --decode > android/app/apr-release-key.jks
-          echo '${{ secrets.KEY_PROPERTIES }}' > android/key.properties
 
       - name: Build Android Split APKs
         run: flutter build apk --release --split-per-abi --flavor production --obfuscate --split-debug-info=./build/app/intermediates

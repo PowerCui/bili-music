@@ -10,6 +10,9 @@ flutter/ephemeral/
 x64/
 x86/
 
+# Vendored WebView2 loader must survive the x64/ build-output rule.
+!third_party/webview2/x64/
+
 # Visual Studio cache files
 # files ending in .cache can be ignored
 *.[Cc]ache

@@ -28,7 +28,6 @@ constexpr wchar_t kBrowserArguments[] =
     L"--disable-renderer-backgrounding "
     L"--disable-features=CalculateNativeWinOcclusion";
 constexpr wchar_t kLanguage[] = L"zh-CN";
-constexpr wchar_t kSdkBrowserVersion[] = L"1.0.4314.35";
 
 void AppendLogFile(const std::wstring& message) {
   wchar_t base[MAX_PATH] = {};
@@ -352,7 +351,13 @@ void WallpaperWebview::StartAsync() {
   options.Attach(new WallpaperEnvOptions());
   options->put_AdditionalBrowserArguments(kBrowserArguments);
   options->put_Language(kLanguage);
-  options->put_TargetCompatibleBrowserVersion(kSdkBrowserVersion);
+  wchar_t* available_version = nullptr;
+  if (GetAvailableCoreWebView2BrowserVersionString(
+          nullptr, &available_version) == S_OK &&
+      available_version != nullptr) {
+    options->put_TargetCompatibleBrowserVersion(available_version);
+    CoTaskMemFree(available_version);
+  }
   const std::wstring user_data_folder = UserDataFolder();
   Log(L"wallpaper webview: user data folder: " + user_data_folder);
   const HRESULT error = CreateCoreWebView2EnvironmentWithOptions(

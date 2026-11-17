@@ -28,6 +28,7 @@ constexpr wchar_t kBrowserArguments[] =
     L"--disable-renderer-backgrounding "
     L"--disable-features=CalculateNativeWinOcclusion";
 constexpr wchar_t kLanguage[] = L"zh-CN";
+constexpr wchar_t kSdkBrowserVersion[] = L"1.0.4314.35";
 
 void Log(const std::wstring& message) {
   OutputDebugStringW(message.c_str());
@@ -311,6 +312,7 @@ void WallpaperWebview::StartAsync() {
   options.Attach(new WallpaperEnvOptions());
   options->put_AdditionalBrowserArguments(kBrowserArguments);
   options->put_Language(kLanguage);
+  options->put_TargetCompatibleBrowserVersion(kSdkBrowserVersion);
   const std::wstring user_data_folder = UserDataFolder();
   const HRESULT error = CreateCoreWebView2EnvironmentWithOptions(
       nullptr,

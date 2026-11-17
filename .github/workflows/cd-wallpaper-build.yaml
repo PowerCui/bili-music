@@ -98,10 +98,15 @@ jobs:
             exit 1
           }
           $headers = @("Authorization: Bearer $env:WALLPAPER_ASSETS_TOKEN", "Accept: application/vnd.github+json", "X-GitHub-Api-Version: 2022-11-28")
-          $rel = curl.exe -sS -H $headers[0] -H $headers[1] -H $headers[2] "https://api.github.com/repos/$env:WALLPAPER_ASSETS_REPO/releases/tags/wallpaper-assets"
-          $assetUrl = ($rel | ConvertFrom-Json).assets | Where-Object { $_.name -eq "wallpaper-assets.zip" } | Select-Object -First 1 -ExpandProperty url
+          $rels = curl.exe -sS -H $headers[0] -H $headers[1] -H $headers[2] "https://api.github.com/repos/$env:WALLPAPER_ASSETS_REPO/releases?per_page=100"
+          $release = ($rels | ConvertFrom-Json) | Where-Object { $_.tag_name -eq "wallpaper-assets" -and $_.draft -eq $true } | Select-Object -First 1
+          if ($null -eq $release) {
+            Write-Output "::error::draft release with tag_name wallpaper-assets not found (releases/tags endpoint does not cover drafts; listing showed no match)"
+            exit 1
+          }
+          $assetUrl = ($release.assets | Where-Object { $_.name -eq "wallpaper-assets.zip" } | Select-Object -First 1).url
           if ([string]::IsNullOrEmpty($assetUrl)) {
-            Write-Output "::error::wallpaper-assets.zip not found on the wallpaper-assets release"
+            Write-Output "::error::wallpaper-assets.zip not found on the wallpaper-assets draft release"
             exit 1
           }
           $zip = Join-Path $env:RUNNER_TEMP "wallpaper-assets.zip"

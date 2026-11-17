@@ -284,7 +284,7 @@ WallpaperWebview::WallpaperWebview(
       on_ready_(std::move(on_ready)),
       on_failed_(std::move(on_failed)) {}
 
-void WallpaperWebview::~WallpaperWebview() {
+WallpaperWebview::~WallpaperWebview() {
   Destroy();
 }
 

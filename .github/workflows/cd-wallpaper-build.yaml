@@ -170,6 +170,13 @@ jobs:
         shell: pwsh
         run: |
           $env:APP_VERSION = "cd-wallpaper-${{ github.run_number }}"
+          $fa = "build\windows\x64\runner\Release\data\flutter_assets\assets"
+          New-Item -ItemType Directory -Force -Path "$fa\wallpaper", "$fa\wallpaper_host" | Out-Null
+          Copy-Item "assets\wallpaper\*" "$fa\wallpaper" -Recurse -Force
+          Copy-Item "assets\wallpaper_host\*" "$fa\wallpaper_host" -Recurse -Force
+          Write-Output "--- staged into flutter_assets ---"
+          Get-ChildItem "$fa\wallpaper" | ForEach-Object { Write-Output $_.Name }
+          Get-ChildItem "$fa\wallpaper_host" | ForEach-Object { Write-Output $_.Name }
           iscc scripts/bilimusic.iss
 
       - name: Upload Windows Artifact

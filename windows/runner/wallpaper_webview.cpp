@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include <wrl/callback.h>
+#include <wrl/implements.h>
 
 namespace {
 

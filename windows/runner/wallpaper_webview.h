@@ -57,4 +57,6 @@ class WallpaperWebview : public std::enable_shared_from_this<WallpaperWebview> {
   bool failed_ = false;
 };
 
+void WallpaperLog(const std::wstring& message);
+
 #endif  // RUNNER_WALLPAPER_WEBVIEW_H_

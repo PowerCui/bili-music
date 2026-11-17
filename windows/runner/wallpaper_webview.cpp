@@ -30,9 +30,45 @@ constexpr wchar_t kBrowserArguments[] =
 constexpr wchar_t kLanguage[] = L"zh-CN";
 constexpr wchar_t kSdkBrowserVersion[] = L"1.0.4314.35";
 
+void AppendLogFile(const std::wstring& message) {
+  wchar_t base[MAX_PATH] = {};
+  const DWORD length =
+      GetEnvironmentVariableW(L"LOCALAPPDATA", base, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    return;
+  }
+  const std::wstring directory = std::wstring(base) + L"\\bilimusic";
+  CreateDirectoryW(directory.c_str(), nullptr);
+  const std::wstring path = directory + L"\\wallpaper.log";
+  HANDLE file = CreateFileW(path.c_str(), FILE_APPEND_DATA,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    return;
+  }
+  SYSTEMTIME time = {};
+  GetLocalTime(&time);
+  wchar_t stamp[40] = {};
+  swprintf_s(stamp, 40, L"[%02u:%02u:%02u.%03u] ", time.wHour, time.wMinute,
+             time.wSecond, time.wMilliseconds);
+  const std::wstring line = std::wstring(stamp) + message + L"\r\n";
+  const int size = WideCharToMultiByte(CP_UTF8, 0, line.c_str(), -1, nullptr,
+                                       0, nullptr, nullptr);
+  if (size > 0) {
+    std::vector<char> buffer(size);
+    WideCharToMultiByte(CP_UTF8, 0, line.c_str(), -1, buffer.data(), size,
+                        nullptr, nullptr);
+    DWORD written = 0;
+    WriteFile(file, buffer.data(), static_cast<DWORD>(size - 1), &written,
+              nullptr);
+  }
+  CloseHandle(file);
+}
+
 void Log(const std::wstring& message) {
   OutputDebugStringW(message.c_str());
   OutputDebugStringW(L"\n");
+  AppendLogFile(message);
 }
 
 std::wstring Utf8ToWide(const std::string& input) {
@@ -263,6 +299,10 @@ class WallpaperEnvOptions : public ICoreWebView2EnvironmentOptions {
 
 }  // namespace
 
+void WallpaperLog(const std::wstring& message) {
+  Log(message);
+}
+
 void WallpaperWebview::DrainEnvironmentWaiters(HRESULT error) {
   std::vector<std::weak_ptr<WallpaperWebview>> waiters;
   waiters.swap(g_pending_environment_waiters);
@@ -314,6 +354,7 @@ void WallpaperWebview::StartAsync() {
   options->put_Language(kLanguage);
   options->put_TargetCompatibleBrowserVersion(kSdkBrowserVersion);
   const std::wstring user_data_folder = UserDataFolder();
+  Log(L"wallpaper webview: user data folder: " + user_data_folder);
   const HRESULT error = CreateCoreWebView2EnvironmentWithOptions(
       nullptr,
       user_data_folder.empty() ? nullptr : user_data_folder.c_str(),
@@ -323,11 +364,15 @@ void WallpaperWebview::StartAsync() {
           [](HRESULT result, ICoreWebView2Environment* environment)
               -> HRESULT {
             g_environment_create_in_flight = false;
+            wchar_t code[16] = {};
+            swprintf_s(code, 16, L"%08lX",
+                       static_cast<unsigned long>(result));
             if (SUCCEEDED(result) && environment != nullptr) {
               g_environment = environment;
               Log(L"wallpaper webview: environment created");
             } else {
-              Log(L"wallpaper webview: environment creation failed");
+              Log(L"wallpaper webview: environment creation failed hr=0x" +
+                  std::wstring(code));
             }
             WallpaperWebview::DrainEnvironmentWaiters(result);
             return S_OK;

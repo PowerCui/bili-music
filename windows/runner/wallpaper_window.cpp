@@ -1,5 +1,7 @@
 #include "wallpaper_window.h"
 
+#include "wallpaper_webview.h"
+
 #include <cstddef>
 #include <utility>
 
@@ -117,10 +119,13 @@ bool WallpaperWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+  WallpaperLog(L"wallpaper window: created");
 
   created_ = true;
   EmbedInDesktop();
   ApplyBounds();
+
+  WallpaperLog(L"wallpaper window: embedded, starting webview");
 
   webview_ = std::make_shared<WallpaperWebview>(
       GetHandle(), on_ready_, [this](HRESULT error) {
@@ -188,6 +193,9 @@ void WallpaperWindow::EmbedInDesktop() {
   HWND host = FindDesktopWorker();
   if (host != nullptr) {
     ::SetParent(handle, host);
+    WallpaperLog(L"wallpaper window: attached to WorkerW");
+  } else {
+    WallpaperLog(L"wallpaper window: WorkerW not found, popup fallback");
   }
 
   LONG_PTR style = ::GetWindowLongPtr(handle, GWL_STYLE);

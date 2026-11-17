@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "wallpaper_webview.h"
 
 namespace {
 constexpr UINT kPreviousCommand = 1;
@@ -24,6 +25,7 @@ constexpr UINT_PTR kReattachWallpaperTimerId = 2;
 constexpr UINT_PTR kWallpaperPatrolTimerId = 3;
 constexpr UINT kReattachWallpaperDelayMs = 3000;
 constexpr UINT kWallpaperPatrolIntervalMs = 30000;
+int g_wallpaper_push_logs = 0;
 
 bool ReadBool(const flutter::EncodableMap& arguments, const char* key) {
   const auto iterator = arguments.find(flutter::EncodableValue(key));
@@ -59,6 +61,7 @@ bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+  WallpaperLog(L"wallpaper: flutter window created");
 
   RECT frame = GetClientArea();
 
@@ -360,6 +363,13 @@ void FlutterWindow::HandleWallpaperMethodCall(
     const flutter::MethodCall<flutter::EncodableValue>& call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   const std::string& method = call.method_name();
+  if (method != "pushState" || g_wallpaper_push_logs < 3) {
+    if (method == "pushState") {
+      ++g_wallpaper_push_logs;
+    }
+    WallpaperLog(L"wallpaper channel: " +
+                 std::wstring(method.begin(), method.end()));
+  }
   if (method == "show") {
     bool shown = false;
     if (call.arguments() &&
@@ -431,6 +441,7 @@ void FlutterWindow::HandleWallpaperMethodCall(
 }
 
 bool FlutterWindow::ShowWallpaper(int monitor_index) {
+  WallpaperLog(L"wallpaper: show requested");
   DestroyWallpaperWindow();
 
   const RECT bounds = WallpaperWindow::MonitorBounds(monitor_index);
@@ -444,11 +455,13 @@ bool FlutterWindow::ShowWallpaper(int monitor_index) {
           Win32Window::Size(
               static_cast<unsigned int>(bounds.right - bounds.left),
               static_cast<unsigned int>(bounds.bottom - bounds.top)))) {
+    WallpaperLog(L"wallpaper: window Create failed");
     window->Destroy();
     wallpaper_active_ = false;
     return false;
   }
   if (window->webview_failed()) {
+    WallpaperLog(L"wallpaper: webview failed at startup");
     window->Destroy();
     wallpaper_active_ = false;
     return false;
@@ -458,11 +471,13 @@ bool FlutterWindow::ShowWallpaper(int monitor_index) {
   wallpaper_window_ = std::move(window);
   wallpaper_active_ = true;
   wallpaper_monitor_index_ = monitor_index;
+  WallpaperLog(L"wallpaper: window created");
   SendCachedWallpaperState();
   return true;
 }
 
 void FlutterWindow::HideWallpaper() {
+  WallpaperLog(L"wallpaper: hide");
   wallpaper_active_ = false;
   DestroyWallpaperWindow();
   ResetWallpaperState();
@@ -509,6 +524,7 @@ void FlutterWindow::ResetWallpaperState() {
 }
 
 void FlutterWindow::OnWallpaperReady() {
+  WallpaperLog(L"wallpaper: page ready callback");
   wallpaper_ready_ = true;
   if (wallpaper_channel_) {
     wallpaper_channel_->InvokeMethod(
@@ -522,8 +538,7 @@ void FlutterWindow::OnWallpaperFailed(HRESULT error) {
   wchar_t code[16] = {};
   swprintf_s(code, 16, L"%08lX", static_cast<unsigned long>(error));
   detail += code;
-  detail += L"\n";
-  OutputDebugStringW(detail.c_str());
+  WallpaperLog(detail);
   HWND handle = GetHandle();
   if (destroying_wallpaper_ || handle == nullptr || !wallpaper_window_) {
     return;

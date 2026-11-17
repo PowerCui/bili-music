@@ -1,8 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 
-typedef WallpaperControlHandler = void Function(Map<Object?, Object?> arguments);
-typedef WallpaperStateHandler =
-    void Function(String? payload, Uint8List? cover);
+typedef WallpaperControlHandler =
+    void Function(Map<Object?, Object?> arguments);
+typedef WallpaperReadyHandler = void Function();
 
 class WallpaperMonitor {
   const WallpaperMonitor({
@@ -73,21 +75,20 @@ class DesktopWallpaperBridge {
       if (raw == null) {
         return const <WallpaperMonitor>[];
       }
-      return raw
-          .whereType<Map<Object?, Object?>>()
-          .map((Map<Object?, Object?> entry) {
-            final Object? index = entry['index'];
-            final Object? width = entry['width'];
-            final Object? height = entry['height'];
-            final Object? primary = entry['primary'];
-            return WallpaperMonitor(
-              index: index is int ? index : 0,
-              width: width is int ? width : 0,
-              height: height is int ? height : 0,
-              isPrimary: primary is bool && primary,
-            );
-          })
-          .toList();
+      return raw.whereType<Map<Object?, Object?>>().map((
+        Map<Object?, Object?> entry,
+      ) {
+        final Object? index = entry['index'];
+        final Object? width = entry['width'];
+        final Object? height = entry['height'];
+        final Object? primary = entry['primary'];
+        return WallpaperMonitor(
+          index: index is int ? index : 0,
+          width: width is int ? width : 0,
+          height: height is int ? height : 0,
+          isPrimary: primary is bool && primary,
+        );
+      }).toList();
     } on PlatformException {
       return const <WallpaperMonitor>[];
     } on MissingPluginException {
@@ -98,14 +99,18 @@ class DesktopWallpaperBridge {
   static void attach({
     required WallpaperControlHandler onControl,
     required VoidCallback onWindowClosed,
+    WallpaperReadyHandler? onReady,
   }) {
     channel.setMethodCallHandler((MethodCall call) async {
       switch (call.method) {
         case 'control':
           final Object? arguments = call.arguments;
           if (arguments is Map<Object?, Object?>) {
-            onControl(arguments);
+            onControl(_decodeControlBody(arguments));
           }
+          return;
+        case 'ready':
+          onReady?.call();
           return;
         case 'windowClosed':
           onWindowClosed();
@@ -116,52 +121,22 @@ class DesktopWallpaperBridge {
     });
   }
 
-  static void detach() {
-    channel.setMethodCallHandler(null);
-  }
-}
-
-class WallpaperViewBridge {
-  static const MethodChannel channel = MethodChannel(
-    'bilimusic/desktop_wallpaper_view',
-  );
-
-  static Future<void> notifyReady() async {
-    try {
-      await channel.invokeMethod<void>('ready');
-    } on PlatformException {
-      return;
-    } on MissingPluginException {
-      return;
+  static Map<Object?, Object?> _decodeControlBody(
+    Map<Object?, Object?> arguments,
+  ) {
+    final Object? raw = arguments['payload'];
+    if (raw is! String || raw.isEmpty) {
+      return arguments;
     }
-  }
-
-  static Future<void> sendControl(Map<String, Object?> arguments) async {
     try {
-      await channel.invokeMethod<void>('control', arguments);
-    } on PlatformException {
-      return;
-    } on MissingPluginException {
-      return;
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return Map<Object?, Object?>.from(decoded);
+      }
+    } on FormatException {
+      return arguments;
     }
-  }
-
-  static void attach({required WallpaperStateHandler onState}) {
-    channel.setMethodCallHandler((MethodCall call) async {
-      if (call.method != 'state') {
-        return;
-      }
-      final Object? arguments = call.arguments;
-      if (arguments is! Map<Object?, Object?>) {
-        return;
-      }
-      final Object? payload = arguments['payload'];
-      final Object? cover = arguments['cover'];
-      onState(
-        payload is String ? payload : null,
-        cover is Uint8List ? cover : null,
-      );
-    });
+    return arguments;
   }
 
   static void detach() {

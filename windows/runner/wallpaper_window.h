@@ -1,17 +1,12 @@
 #ifndef RUNNER_WALLPAPER_WINDOW_H_
 #define RUNNER_WALLPAPER_WINDOW_H_
 
-#include <flutter/dart_project.h>
-#include <flutter/flutter_view_controller.h>
-#include <flutter/method_channel.h>
-#include <flutter/standard_method_codec.h>
-
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "wallpaper_webview.h"
 #include "win32_window.h"
 
 class WallpaperWindow : public Win32Window {
@@ -22,18 +17,23 @@ class WallpaperWindow : public Win32Window {
   };
 
   using ReadyHandler = std::function<void()>;
-  using ControlHandler = std::function<void(const flutter::EncodableMap&)>;
+  using FailedHandler = std::function<void(HRESULT)>;
   using ClosedHandler = std::function<void()>;
 
-  WallpaperWindow(const flutter::DartProject& project, const RECT& bounds,
-                  ReadyHandler on_ready, ControlHandler on_control,
-                  ClosedHandler on_closed);
+  WallpaperWindow(const RECT& bounds, ReadyHandler on_ready,
+                  FailedHandler on_failed, ClosedHandler on_closed);
   ~WallpaperWindow() override;
+
+  WallpaperWindow(const WallpaperWindow&) = delete;
+  WallpaperWindow& operator=(const WallpaperWindow&) = delete;
 
   static std::vector<MonitorEntry> EnumerateMonitors();
   static RECT MonitorBounds(int monitor_index);
 
-  void SendState(const std::string& payload, const std::vector<uint8_t>* cover);
+  void SendState(const std::string& payload);
+  void Reload();
+  void OpenDevTools();
+  bool webview_failed() const { return webview_failed_; }
 
  protected:
   bool OnCreate() override;
@@ -45,15 +45,13 @@ class WallpaperWindow : public Win32Window {
   void EmbedInDesktop();
   void ApplyBounds();
 
-  flutter::DartProject project_;
   RECT bounds_;
   ReadyHandler on_ready_;
-  ControlHandler on_control_;
+  FailedHandler on_failed_;
   ClosedHandler on_closed_;
   bool created_ = false;
-  std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
-  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
-      view_channel_;
+  bool webview_failed_ = false;
+  std::shared_ptr<WallpaperWebview> webview_;
 };
 
 #endif  // RUNNER_WALLPAPER_WINDOW_H_

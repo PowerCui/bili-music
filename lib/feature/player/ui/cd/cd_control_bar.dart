@@ -67,7 +67,7 @@ class CdControlBar extends StatelessWidget {
   }
 }
 
-class _CdProgressTrack extends StatelessWidget {
+class _CdProgressTrack extends StatefulWidget {
   const _CdProgressTrack({
     required this.playback,
     required this.accentColor,
@@ -79,14 +79,27 @@ class _CdProgressTrack extends StatelessWidget {
   final ValueChanged<Duration>? onSeek;
 
   @override
+  State<_CdProgressTrack> createState() => _CdProgressTrackState();
+}
+
+class _CdProgressTrackState extends State<_CdProgressTrack> {
+  double? _dragRatio;
+
+  double get _progress => _dragRatio ?? widget.playback.progress;
+
+  @override
   Widget build(BuildContext context) {
+    final NowPlayingPlayback playback = widget.playback;
+    final Color accentColor = widget.accentColor;
     final Duration? duration = playback.duration;
     final bool seekable =
-        onSeek != null && duration != null && duration > Duration.zero;
+        widget.onSeek != null && duration != null && duration > Duration.zero;
     final TextStyle style = Theme.of(context).textTheme.bodySmall!.copyWith(
       color: Colors.white.withValues(alpha: 0.56),
       fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
     );
+    final double progress = _progress;
+    final Duration? dragPosition = _positionFor(_dragRatio);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -97,21 +110,29 @@ class _CdProgressTrack extends StatelessWidget {
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: seekable
-                  ? (TapDownDetails details) => _seek(
-                      details.localPosition.dx,
-                      width,
+                  ? (TapDownDetails details) => _commit(
+                      (details.localPosition.dx / width).clamp(0.0, 1.0),
                     )
                   : null,
               onHorizontalDragUpdate: seekable
-                  ? (DragUpdateDetails details) => _seek(
-                      details.localPosition.dx,
-                      width,
-                    )
+                  ? (DragUpdateDetails details) {
+                      setState(() {
+                        _dragRatio = (details.localPosition.dx / width).clamp(
+                          0.0,
+                          1.0,
+                        );
+                      });
+                    }
                   : null,
+              onHorizontalDragEnd: seekable
+                  ? (DragEndDetails details) => _commitDrag()
+                  : null,
+              onHorizontalDragCancel: seekable ? _cancelDrag : null,
               child: SizedBox(
                 height: 20,
                 child: Center(
                   child: Stack(
+                    alignment: Alignment.center,
                     clipBehavior: Clip.none,
                     children: <Widget>[
                       Container(
@@ -122,7 +143,7 @@ class _CdProgressTrack extends StatelessWidget {
                         ),
                       ),
                       FractionallySizedBox(
-                        widthFactor: playback.progress,
+                        widthFactor: progress,
                         child: Container(
                           height: 4,
                           decoration: BoxDecoration(
@@ -137,10 +158,7 @@ class _CdProgressTrack extends StatelessWidget {
                         ),
                       ),
                       Align(
-                        alignment: Alignment(
-                          playback.progress * 2 - 1,
-                          double.infinity,
-                        ),
+                        alignment: Alignment(progress * 2 - 1, 0),
                         child: Container(
                           width: 11,
                           height: 11,
@@ -167,7 +185,10 @@ class _CdProgressTrack extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 2),
           child: Row(
             children: <Widget>[
-              Text(_formatDuration(playback.position), style: style),
+              Text(
+                _formatDuration(dragPosition ?? playback.position),
+                style: style,
+              ),
               const Spacer(),
               Text(_formatDuration(duration), style: style),
             ],
@@ -177,16 +198,43 @@ class _CdProgressTrack extends StatelessWidget {
     );
   }
 
-  void _seek(double dx, double width) {
-    final ValueChanged<Duration>? handler = onSeek;
-    final Duration? duration = playback.duration;
-    if (handler == null || duration == null || width <= 0) {
+  Duration? _positionFor(double? ratio) {
+    final Duration? duration = widget.playback.duration;
+    if (ratio == null || duration == null || duration <= Duration.zero) {
+      return null;
+    }
+    return Duration(milliseconds: (duration.inMilliseconds * ratio).round());
+  }
+
+  void _commit(double ratio) {
+    final ValueChanged<Duration>? handler = widget.onSeek;
+    if (handler == null) {
       return;
     }
-    final double ratio = (dx / width).clamp(0.0, 1.0);
-    handler(
-      Duration(milliseconds: (duration.inMilliseconds * ratio).round()),
-    );
+    final Duration? position = _positionFor(ratio);
+    if (position != null) {
+      handler(position);
+    }
+  }
+
+  void _commitDrag() {
+    final double? ratio = _dragRatio;
+    if (ratio == null) {
+      return;
+    }
+    setState(() {
+      _dragRatio = null;
+    });
+    _commit(ratio);
+  }
+
+  void _cancelDrag() {
+    if (_dragRatio == null) {
+      return;
+    }
+    setState(() {
+      _dragRatio = null;
+    });
   }
 }
 
@@ -244,9 +292,7 @@ class _CdPlayButton extends StatelessWidget {
                   ),
                 )
               : Icon(
-                  isPlaying
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
+                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                   size: size * 0.52,
                   color: const Color(0xFF0E1319),
                 ),

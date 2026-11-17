@@ -1,5 +1,7 @@
 #include "flutter_window.h"
 
+#include <cstdio>
+#include <cwchar>
 #include <optional>
 #include <utility>
 
@@ -17,6 +19,11 @@ constexpr int kPauseGlyph = 2;
 constexpr int kNextGlyph = 3;
 constexpr char kDesktopWallpaperChannel[] = "bilimusic/desktop_wallpaper";
 constexpr UINT kWallpaperWindowClosedMessage = WM_APP + 1;
+constexpr UINT kWallpaperFailedMessage = WM_APP + 2;
+constexpr UINT_PTR kReattachWallpaperTimerId = 2;
+constexpr UINT_PTR kWallpaperPatrolTimerId = 3;
+constexpr UINT kReattachWallpaperDelayMs = 3000;
+constexpr UINT kWallpaperPatrolIntervalMs = 30000;
 
 bool ReadBool(const flutter::EncodableMap& arguments, const char* key) {
   const auto iterator = arguments.find(flutter::EncodableValue(key));
@@ -97,6 +104,11 @@ bool FlutterWindow::OnCreate() {
         HandleWallpaperMethodCall(call, std::move(result));
       });
   InitializeTaskbarThumbnailToolbar();
+  taskbar_created_message_ = RegisterWindowMessage(L"TaskbarCreated");
+  if (GetHandle() != nullptr) {
+    ::SetTimer(GetHandle(), kWallpaperPatrolTimerId, kWallpaperPatrolIntervalMs,
+               nullptr);
+  }
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -134,8 +146,35 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   if (message == kWallpaperWindowClosedMessage) {
-    HandleWallpaperWindowClosed();
+    HandleWallpaperWindowClosed(reinterpret_cast<WallpaperWindow*>(wparam));
     return 0;
+  }
+
+  if (message == kWallpaperFailedMessage) {
+    HandleWallpaperFailed(reinterpret_cast<WallpaperWindow*>(wparam));
+    return 0;
+  }
+
+  if (taskbar_created_message_ != 0 && message == taskbar_created_message_) {
+    if (wallpaper_active_ && hwnd != nullptr) {
+      ::SetTimer(hwnd, kReattachWallpaperTimerId, kReattachWallpaperDelayMs,
+                 nullptr);
+    }
+    return 0;
+  }
+
+  if (message == WM_TIMER) {
+    if (wparam == kReattachWallpaperTimerId) {
+      ::KillTimer(hwnd, kReattachWallpaperTimerId);
+      if (wallpaper_active_) {
+        ShowWallpaper(wallpaper_monitor_index_);
+      }
+      return 0;
+    }
+    if (wparam == kWallpaperPatrolTimerId) {
+      CheckWallpaperHost();
+      return 0;
+    }
   }
 
   if (message == WM_COMMAND && HIWORD(wparam) == THBN_CLICKED &&
@@ -372,21 +411,32 @@ void FlutterWindow::HandleWallpaperMethodCall(
     return;
   }
 
+  if (method == "reload") {
+    if (wallpaper_window_) {
+      wallpaper_window_->Reload();
+    }
+    result->Success();
+    return;
+  }
+
+  if (method == "openDevTools") {
+    if (wallpaper_window_) {
+      wallpaper_window_->OpenDevTools();
+    }
+    result->Success();
+    return;
+  }
+
   result->NotImplemented();
 }
 
 bool FlutterWindow::ShowWallpaper(int monitor_index) {
   DestroyWallpaperWindow();
 
-  flutter::DartProject wallpaper_project(project_);
-  wallpaper_project.set_dart_entrypoint("wallpaperMain");
-
   const RECT bounds = WallpaperWindow::MonitorBounds(monitor_index);
   auto window = std::make_unique<WallpaperWindow>(
-      wallpaper_project, bounds, [this]() { OnWallpaperReady(); },
-      [this](const flutter::EncodableMap& arguments) {
-        OnWallpaperControl(arguments);
-      },
+      bounds, [this]() { OnWallpaperReady(); },
+      [this](HRESULT error) { OnWallpaperFailed(error); },
       [this]() { OnWallpaperClosed(); });
 
   if (!window->Create(
@@ -395,16 +445,25 @@ bool FlutterWindow::ShowWallpaper(int monitor_index) {
               static_cast<unsigned int>(bounds.right - bounds.left),
               static_cast<unsigned int>(bounds.bottom - bounds.top)))) {
     window->Destroy();
+    wallpaper_active_ = false;
+    return false;
+  }
+  if (window->webview_failed()) {
+    window->Destroy();
+    wallpaper_active_ = false;
     return false;
   }
   window->SetQuitOnClose(false);
 
   wallpaper_window_ = std::move(window);
+  wallpaper_active_ = true;
+  wallpaper_monitor_index_ = monitor_index;
   SendCachedWallpaperState();
   return true;
 }
 
 void FlutterWindow::HideWallpaper() {
+  wallpaper_active_ = false;
   DestroyWallpaperWindow();
   ResetWallpaperState();
 }
@@ -424,22 +483,13 @@ void FlutterWindow::DestroyWallpaperWindow() {
 void FlutterWindow::PushWallpaperState(
     const flutter::EncodableMap& arguments) {
   wallpaper_has_state_ = false;
-  wallpaper_cover_present_ = false;
   wallpaper_payload_.clear();
-  wallpaper_cover_.clear();
 
   const auto payload = arguments.find(flutter::EncodableValue("payload"));
   if (payload != arguments.end() &&
       std::holds_alternative<std::string>(payload->second)) {
     wallpaper_payload_ = std::get<std::string>(payload->second);
     wallpaper_has_state_ = true;
-  }
-
-  const auto cover = arguments.find(flutter::EncodableValue("cover"));
-  if (cover != arguments.end() &&
-      std::holds_alternative<std::vector<uint8_t>>(cover->second)) {
-    wallpaper_cover_ = std::get<std::vector<uint8_t>>(cover->second);
-    wallpaper_cover_present_ = true;
   }
 
   SendCachedWallpaperState();
@@ -449,45 +499,67 @@ void FlutterWindow::SendCachedWallpaperState() {
   if (!wallpaper_window_ || !wallpaper_ready_ || !wallpaper_has_state_) {
     return;
   }
-  wallpaper_window_->SendState(
-      wallpaper_payload_,
-      wallpaper_cover_present_ ? &wallpaper_cover_ : nullptr);
+  wallpaper_window_->SendState(wallpaper_payload_);
 }
 
 void FlutterWindow::ResetWallpaperState() {
   wallpaper_has_state_ = false;
-  wallpaper_cover_present_ = false;
   wallpaper_payload_.clear();
-  wallpaper_cover_.clear();
   wallpaper_ready_ = false;
 }
 
 void FlutterWindow::OnWallpaperReady() {
   wallpaper_ready_ = true;
+  if (wallpaper_channel_) {
+    wallpaper_channel_->InvokeMethod(
+        "ready", std::make_unique<flutter::EncodableValue>());
+  }
   SendCachedWallpaperState();
 }
 
-void FlutterWindow::OnWallpaperControl(
-    const flutter::EncodableMap& arguments) {
-  if (!wallpaper_channel_) {
+void FlutterWindow::OnWallpaperFailed(HRESULT error) {
+  std::wstring detail = L"wallpaper: webview failed hr=0x";
+  wchar_t code[16] = {};
+  swprintf_s(code, 16, L"%08lX", static_cast<unsigned long>(error));
+  detail += code;
+  detail += L"\n";
+  OutputDebugStringW(detail.c_str());
+  HWND handle = GetHandle();
+  if (destroying_wallpaper_ || handle == nullptr || !wallpaper_window_) {
     return;
   }
-  wallpaper_channel_->InvokeMethod(
-      "control", std::make_unique<flutter::EncodableValue>(arguments));
+  ::PostMessage(handle, kWallpaperFailedMessage,
+                reinterpret_cast<WPARAM>(wallpaper_window_.get()), 0);
 }
 
 void FlutterWindow::OnWallpaperClosed() {
   HWND handle = GetHandle();
-  if (destroying_wallpaper_ || handle == nullptr) {
+  if (destroying_wallpaper_ || handle == nullptr || !wallpaper_window_) {
     return;
   }
-  ::PostMessage(handle, kWallpaperWindowClosedMessage, 0, 0);
+  ::PostMessage(handle, kWallpaperWindowClosedMessage,
+                reinterpret_cast<WPARAM>(wallpaper_window_.get()), 0);
 }
 
-void FlutterWindow::HandleWallpaperWindowClosed() {
-  if (!wallpaper_window_) {
+void FlutterWindow::HandleWallpaperWindowClosed(WallpaperWindow* source) {
+  if (!wallpaper_window_ || wallpaper_window_.get() != source) {
     return;
   }
+  destroying_wallpaper_ = true;
+  wallpaper_window_.reset();
+  destroying_wallpaper_ = false;
+  wallpaper_ready_ = false;
+  if (wallpaper_channel_) {
+    wallpaper_channel_->InvokeMethod(
+        "windowClosed", std::make_unique<flutter::EncodableValue>());
+  }
+}
+
+void FlutterWindow::HandleWallpaperFailed(WallpaperWindow* source) {
+  if (!wallpaper_window_ || wallpaper_window_.get() != source) {
+    return;
+  }
+  wallpaper_active_ = false;
   destroying_wallpaper_ = true;
   wallpaper_window_.reset();
   destroying_wallpaper_ = false;
@@ -495,5 +567,24 @@ void FlutterWindow::HandleWallpaperWindowClosed() {
   if (wallpaper_channel_) {
     wallpaper_channel_->InvokeMethod(
         "windowClosed", std::make_unique<flutter::EncodableValue>());
+  }
+}
+
+void FlutterWindow::CheckWallpaperHost() {
+  if (!wallpaper_active_) {
+    return;
+  }
+  if (!wallpaper_window_) {
+    ShowWallpaper(wallpaper_monitor_index_);
+    return;
+  }
+  const HWND handle = wallpaper_window_->GetHandle();
+  if (handle == nullptr) {
+    ShowWallpaper(wallpaper_monitor_index_);
+    return;
+  }
+  const HWND parent = ::GetParent(handle);
+  if (parent != nullptr && !::IsWindow(parent)) {
+    ShowWallpaper(wallpaper_monitor_index_);
   }
 }

@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "utils.cpp"
   "wallpaper_window.cpp"
+  "wallpaper_webview.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"
@@ -36,6 +37,21 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+
+# Vendored WebView2 SDK for the wallpaper host window.
+set(WEBVIEW2_DIR "${CMAKE_SOURCE_DIR}/third_party/webview2" CACHE PATH "Vendored WebView2 SDK location")
+target_include_directories(${BINARY_NAME} PRIVATE "${WEBVIEW2_DIR}/include")
+target_link_libraries(${BINARY_NAME} PRIVATE "${WEBVIEW2_DIR}/x64/WebView2Loader.dll.lib")
+add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${WEBVIEW2_DIR}/x64/WebView2Loader.dll"
+    "$<TARGET_FILE_DIR:${BINARY_NAME}>/WebView2Loader.dll"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/../assets/wallpaper"
+    "$<TARGET_FILE_DIR:${BINARY_NAME}>/data/flutter_assets/assets/wallpaper"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/../assets/wallpaper_host"
+    "$<TARGET_FILE_DIR:${BINARY_NAME}>/data/flutter_assets/assets/wallpaper_host")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

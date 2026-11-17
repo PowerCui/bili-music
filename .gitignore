@@ -53,4 +53,8 @@ apr-release-key.jks
 # Flutter Demon user preferences (not tracked)
 .fdemon/settings.local.toml
 .fdemon/config.toml
+
+# Wallpaper assets fetched at CI time from a private source
+assets/wallpaper/*
+!assets/wallpaper/README.md
 /.agent-teams/

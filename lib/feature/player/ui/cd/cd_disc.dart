@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:bilimusic/common/components/cached_image.dart';
@@ -29,6 +30,7 @@ class _CdDiscState extends State<CdDisc> with SingleTickerProviderStateMixin {
   static const Duration _revolution = Duration(seconds: 16);
 
   late final AnimationController _controller;
+  double _turnsOffset = 0;
 
   @override
   void initState() {
@@ -48,8 +50,15 @@ class _CdDiscState extends State<CdDisc> with SingleTickerProviderStateMixin {
     if (widget.isPlaying) {
       _controller.repeat();
     } else {
-      _controller.stop();
+      _holdSpin();
     }
+  }
+
+  void _holdSpin() {
+    _turnsOffset = (_turnsOffset + _controller.value) % 1;
+    _controller
+      ..stop()
+      ..value = 0;
   }
 
   @override
@@ -71,7 +80,16 @@ class _CdDiscState extends State<CdDisc> with SingleTickerProviderStateMixin {
           alignment: Alignment.center,
           children: <Widget>[
             _DiscGlow(size: size, color: widget.accentColor),
-            RotationTransition(turns: _controller, child: _buildFace()),
+            AnimatedBuilder(
+              animation: _controller,
+              builder: (BuildContext context, Widget? child) {
+                return Transform.rotate(
+                  angle: 2 * math.pi * (_turnsOffset + _controller.value),
+                  child: child,
+                );
+              },
+              child: _buildFace(),
+            ),
             IgnorePointer(
               child: SizedBox(
                 width: size,
@@ -259,12 +277,11 @@ class _CdGroovePainter extends CustomPainter {
     const int ringCount = 54;
     for (int index = 0; index < ringCount; index++) {
       final double factor = index / ringCount;
-      final double radius = outer * (holeFactor + (0.985 - holeFactor) * factor);
+      final double radius =
+          outer * (holeFactor + (0.985 - holeFactor) * factor);
       ringPaint
         ..strokeWidth = index.isEven ? 0.7 : 1.2
-        ..color = Colors.white.withValues(
-          alpha: index.isEven ? 0.05 : 0.028,
-        );
+        ..color = Colors.white.withValues(alpha: index.isEven ? 0.05 : 0.028);
       canvas.drawCircle(center, radius, ringPaint);
     }
 
@@ -273,7 +290,10 @@ class _CdGroovePainter extends CustomPainter {
       ..strokeWidth = outer * 0.03
       ..color = accent.withValues(alpha: 0.10)
       ..strokeCap = StrokeCap.round;
-    final Rect arcBounds = Rect.fromCircle(center: center, radius: outer * 0.82);
+    final Rect arcBounds = Rect.fromCircle(
+      center: center,
+      radius: outer * 0.82,
+    );
     canvas.drawArc(arcBounds, -2.32, 0.62, false, accentPaint);
     canvas.drawArc(arcBounds, 0.82, 0.46, false, accentPaint);
 

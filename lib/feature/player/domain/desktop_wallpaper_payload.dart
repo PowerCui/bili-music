@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:bilimusic/feature/player/domain/now_playing.dart';
 
@@ -6,129 +7,93 @@ class DesktopWallpaperPayload {
   const DesktopWallpaperPayload({
     required this.nowPlaying,
     required this.playback,
-    required this.accentColorValue,
   });
 
-  final NowPlaying nowPlaying;
+  final NowPlaying? nowPlaying;
   final NowPlayingPlayback playback;
-  final int accentColorValue;
 
-  static const int schemaVersion = 1;
+  static const int playbackPlaying = 1;
+  static const int playbackPaused = 2;
+  static const int playbackStopped = 3;
+  static const String contentTypeMusic = 'music';
 
-  Map<String, Object?> toJson() {
+  String get title => nowPlaying?.title ?? '';
+  String get artist => nowPlaying?.artist ?? '';
+  String get albumTitle => '';
+  String get subTitle => nowPlaying?.sourceLabel ?? '';
+  String get genres => '';
+  String get contentType => contentTypeMusic;
+  String get lyrics => nowPlaying?.lyrics ?? '';
+
+  String get metadataKey => <String>[
+    title,
+    artist,
+    albumTitle,
+    subTitle,
+    genres,
+    contentType,
+  ].join('\u0000');
+
+  int get playbackState {
+    if (!playback.hasItem) {
+      return playbackStopped;
+    }
+    return playback.isPlaying ? playbackPlaying : playbackPaused;
+  }
+
+  double get positionSeconds => playback.position.inMilliseconds / 1000;
+
+  double get durationSeconds => (playback.duration?.inMilliseconds ?? 0) / 1000;
+
+  Map<String, Object?> metadataJson() {
     return <String, Object?>{
-      'v': schemaVersion,
-      'stableId': nowPlaying.stableId,
-      'title': nowPlaying.title,
-      'artist': nowPlaying.artist,
-      'coverUrl': nowPlaying.coverUrl,
-      'lyrics': nowPlaying.lyrics,
-      'translationLyrics': nowPlaying.translationLyrics,
-      'lyricOffsetMs': nowPlaying.lyricOffsetMs,
-      'durationMs': nowPlaying.duration?.inMilliseconds,
-      'accentColor': accentColorValue,
-      'playback': <String, Object?>{
-        'positionMs': playback.position.inMilliseconds,
-        'durationMs': playback.duration?.inMilliseconds,
-        'isPlaying': playback.isPlaying,
-        'isReady': playback.isReady,
-        'isBuffering': playback.isBuffering,
-        'isLoading': playback.isLoading,
-        'speed': playback.speed,
-        'hasPrevious': playback.hasPrevious,
-        'hasNext': playback.hasNext,
-        'hasItem': playback.hasItem,
-      },
+      'title': title,
+      'artist': artist,
+      'albumTitle': albumTitle,
+      'subTitle': subTitle,
+      'genres': genres,
+      'contentType': contentType,
     };
   }
 
-  String encode() => jsonEncode(toJson());
+  Map<String, Object?> progressJson() {
+    return <String, Object?>{
+      'position': positionSeconds,
+      'duration': durationSeconds,
+      'state': playbackState,
+    };
+  }
 
-  static DesktopWallpaperPayload? decode(String? raw) {
-    if (raw == null || raw.trim().isEmpty) {
-      return null;
-    }
-    try {
-      final Object? decoded = jsonDecode(raw);
-      if (decoded is! Map) {
-        return null;
+  static String buildCoverDataUrl(Uint8List bytes) {
+    return 'data:${_sniffImageMime(bytes)};base64,${base64Encode(bytes)}';
+  }
+
+  static String _sniffImageMime(Uint8List bytes) {
+    if (bytes.length >= 4) {
+      if (bytes[0] == 0x89 &&
+          bytes[1] == 0x50 &&
+          bytes[2] == 0x4E &&
+          bytes[3] == 0x47) {
+        return 'image/png';
       }
-      return fromJson(Map<String, Object?>.from(decoded));
-    } on FormatException {
-      return null;
+      if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) {
+        return 'image/jpeg';
+      }
+      if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) {
+        return 'image/gif';
+      }
     }
-  }
-
-  static DesktopWallpaperPayload fromJson(Map<String, Object?> json) {
-    final Object? playbackRaw = json['playback'];
-    final Map<String, Object?> playbackJson = playbackRaw is Map
-        ? Map<String, Object?>.from(playbackRaw)
-        : const <String, Object?>{};
-    final NowPlaying nowPlaying = NowPlaying(
-      stableId: _readString(json['stableId']) ?? '',
-      title: _readString(json['title']) ?? '',
-      artist: _readString(json['artist']) ?? '',
-      coverUrl: _readString(json['coverUrl']),
-      lyrics: _readString(json['lyrics']),
-      translationLyrics: _readString(json['translationLyrics']),
-      lyricOffsetMs: _readInt(json['lyricOffsetMs']) ?? 0,
-      duration: _readDuration(json['durationMs']),
-    );
-    final NowPlayingPlayback playback = NowPlayingPlayback(
-      position: _readDuration(playbackJson['positionMs']) ?? Duration.zero,
-      duration: _readDuration(playbackJson['durationMs']),
-      isPlaying: _readBool(playbackJson['isPlaying']),
-      isReady: _readBool(playbackJson['isReady']),
-      isBuffering: _readBool(playbackJson['isBuffering']),
-      isLoading: _readBool(playbackJson['isLoading']),
-      speed: _readDouble(playbackJson['speed']) ?? 1,
-      hasPrevious: _readBool(playbackJson['hasPrevious']),
-      hasNext: _readBool(playbackJson['hasNext']),
-      hasItem: _readBool(playbackJson['hasItem'], fallback: true),
-    );
-    return DesktopWallpaperPayload(
-      nowPlaying: nowPlaying,
-      playback: playback,
-      accentColorValue: _readInt(json['accentColor']) ?? 0xFF3B6FF5,
-    );
-  }
-
-  static String? _readString(Object? value) {
-    if (value is String) {
-      return value;
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return 'image/webp';
     }
-    return null;
-  }
-
-  static int? _readInt(Object? value) {
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    return null;
-  }
-
-  static double? _readDouble(Object? value) {
-    if (value is num) {
-      return value.toDouble();
-    }
-    return null;
-  }
-
-  static bool _readBool(Object? value, {bool fallback = false}) {
-    if (value is bool) {
-      return value;
-    }
-    return fallback;
-  }
-
-  static Duration? _readDuration(Object? value) {
-    final int? milliseconds = _readInt(value);
-    if (milliseconds == null) {
-      return null;
-    }
-    return Duration(milliseconds: milliseconds);
+    return 'image/jpeg';
   }
 }

@@ -49,9 +49,11 @@ class FlutterWindow : public Win32Window {
   void SendCachedWallpaperState();
   void ResetWallpaperState();
   void OnWallpaperReady();
-  void OnWallpaperControl(const flutter::EncodableMap& arguments);
+  void OnWallpaperFailed(HRESULT error);
   void OnWallpaperClosed();
-  void HandleWallpaperWindowClosed();
+  void HandleWallpaperWindowClosed(WallpaperWindow* source);
+  void HandleWallpaperFailed(WallpaperWindow* source);
+  void CheckWallpaperHost();
 
   // The project to run.
   flutter::DartProject project_;
@@ -62,6 +64,7 @@ class FlutterWindow : public Win32Window {
       taskbar_channel_;
   Microsoft::WRL::ComPtr<ITaskbarList3> taskbar_list_;
   UINT taskbar_button_created_message_ = 0;
+  UINT taskbar_created_message_ = 0;
   HICON previous_icon_ = nullptr;
   HICON play_icon_ = nullptr;
   HICON pause_icon_ = nullptr;
@@ -76,9 +79,9 @@ class FlutterWindow : public Win32Window {
       wallpaper_channel_;
   std::unique_ptr<WallpaperWindow> wallpaper_window_;
   std::string wallpaper_payload_;
-  std::vector<uint8_t> wallpaper_cover_;
+  bool wallpaper_active_ = false;
+  int wallpaper_monitor_index_ = 0;
   bool wallpaper_has_state_ = false;
-  bool wallpaper_cover_present_ = false;
   bool wallpaper_ready_ = false;
   bool destroying_wallpaper_ = false;
 };

@@ -15,7 +15,6 @@ import 'package:bilimusic/feature/player/logic/player_controller.dart';
 import 'package:bilimusic/feature/player/logic/media_session/player_media_session_sync.dart';
 import 'package:bilimusic/feature/player/logic/sleep_timer_controller.dart';
 import 'package:bilimusic/feature/player/logic/wallpaper/desktop_wallpaper_controller.dart';
-import 'package:bilimusic/feature/player/ui/wallpaper/wallpaper_app.dart';
 import 'package:bilimusic/feature/statistics/logic/statistics_tracker.dart';
 import 'package:bilimusic/feature/up/logic/favorite_up_controller.dart';
 import 'package:bilimusic/feature/favorites/logic/favorited_season_controller.dart';
@@ -25,17 +24,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:media_kit/media_kit.dart';
-
-@pragma('vm:entry-point')
-void wallpaperMain() {
-  WidgetsFlutterBinding.ensureInitialized();
-  unawaited(_runWallpaperApp());
-}
-
-Future<void> _runWallpaperApp() async {
-  await DesktopChineseFont.load();
-  runApp(const WallpaperApp());
-}
 
 Future<DesktopAppLifecycle?> bootstrap(ProviderContainer container) async {
   MediaKit.ensureInitialized();

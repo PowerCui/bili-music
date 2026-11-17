@@ -1,0 +1,1 @@
+Microsoft.Web.WebView2 SDK 1.0.4314.35 (Evergreen loader, x64) vendored from https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4314.35

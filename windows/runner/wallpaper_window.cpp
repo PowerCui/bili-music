@@ -1,11 +1,9 @@
 #include "wallpaper_window.h"
 
 #include <cstddef>
-#include <optional>
 #include <utility>
 
 namespace {
-constexpr char kViewChannelName[] = "bilimusic/desktop_wallpaper_view";
 constexpr UINT kSpawnWorkerMessage = 0x052C;
 constexpr wchar_t kProgmanClass[] = L"Progman";
 constexpr wchar_t kWorkerClass[] = L"WorkerW";
@@ -17,7 +15,7 @@ struct MonitorCapture {
 };
 
 BOOL CALLBACK CollectMonitor(HMONITOR monitor, HDC device_context, LPRECT rect,
-                             LPARAM data) {
+                              LPARAM data) {
   auto* monitors = reinterpret_cast<std::vector<MonitorCapture>*>(data);
   if (monitors == nullptr) {
     return TRUE;
@@ -59,14 +57,12 @@ HWND FindDesktopWorker() {
 }
 }  // namespace
 
-WallpaperWindow::WallpaperWindow(const flutter::DartProject& project,
-                                 const RECT& bounds, ReadyHandler on_ready,
-                                 ControlHandler on_control,
+WallpaperWindow::WallpaperWindow(const RECT& bounds, ReadyHandler on_ready,
+                                 FailedHandler on_failed,
                                  ClosedHandler on_closed)
-    : project_(project),
-      bounds_(bounds),
+    : bounds_(bounds),
       on_ready_(std::move(on_ready)),
-      on_control_(std::move(on_control)),
+      on_failed_(std::move(on_failed)),
       on_closed_(std::move(on_closed)) {}
 
 WallpaperWindow::~WallpaperWindow() {
@@ -126,61 +122,20 @@ bool WallpaperWindow::OnCreate() {
   EmbedInDesktop();
   ApplyBounds();
 
-  RECT frame = GetClientArea();
-
-  flutter_controller_ = std::make_unique<flutter::FlutterViewController>(
-      frame.right - frame.left, frame.bottom - frame.top, project_);
-  if (!flutter_controller_->engine() || !flutter_controller_->view()) {
-    return false;
-  }
-
-  view_channel_ =
-      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-          flutter_controller_->engine()->messenger(), kViewChannelName,
-          &flutter::StandardMethodCodec::GetInstance());
-  view_channel_->SetMethodCallHandler(
-      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
-             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
-                 result) {
-        const std::string& method = call.method_name();
-        if (method == "ready") {
-          if (on_ready_) {
-            on_ready_();
-          }
-          result->Success();
-          return;
+  webview_ = std::make_shared<WallpaperWebview>(
+      GetHandle(), on_ready_, [this](HRESULT error) {
+        webview_failed_ = true;
+        if (on_failed_) {
+          on_failed_(error);
         }
-        if (method == "control") {
-          if (call.arguments() &&
-              std::holds_alternative<flutter::EncodableMap>(
-                  *call.arguments()) &&
-              on_control_) {
-            on_control_(std::get<flutter::EncodableMap>(*call.arguments()));
-          }
-          result->Success();
-          return;
-        }
-        result->NotImplemented();
       });
-
-  SetChildContent(flutter_controller_->view()->GetNativeWindow());
-
-  flutter_controller_->engine()->SetNextFrameCallback([this]() {
-    Show();
-    ApplyBounds();
-  });
-
-  flutter_controller_->ForceRedraw();
+  webview_->StartAsync();
 
   return true;
 }
 
 void WallpaperWindow::OnDestroy() {
-  if (view_channel_) {
-    view_channel_->SetMethodCallHandler(nullptr);
-    view_channel_.reset();
-  }
-  flutter_controller_.reset();
+  webview_.reset();
 
   if (created_) {
     created_ = false;
@@ -198,40 +153,30 @@ LRESULT
 WallpaperWindow::MessageHandler(HWND hwnd, UINT const message,
                                 WPARAM const wparam,
                                 LPARAM const lparam) noexcept {
-  if (flutter_controller_) {
-    std::optional<LRESULT> result =
-        flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
-                                                      lparam);
-    if (result) {
-      return *result;
-    }
-  }
-
   const LRESULT result =
       Win32Window::MessageHandler(hwnd, message, wparam, lparam);
-  if (message == WM_DPICHANGED) {
+  if (message == WM_DPICHANGED || message == WM_SIZE) {
     ApplyBounds();
   }
   return result;
 }
 
-void WallpaperWindow::SendState(const std::string& payload,
-                                const std::vector<uint8_t>* cover) {
-  if (!view_channel_) {
-    return;
+void WallpaperWindow::SendState(const std::string& payload) {
+  if (webview_) {
+    webview_->PostState(payload);
   }
+}
 
-  flutter::EncodableMap arguments;
-  arguments[flutter::EncodableValue("payload")] =
-      flutter::EncodableValue(payload);
-  if (cover != nullptr) {
-    arguments[flutter::EncodableValue("cover")] =
-        flutter::EncodableValue(*cover);
-  } else {
-    arguments[flutter::EncodableValue("cover")] = flutter::EncodableValue();
+void WallpaperWindow::Reload() {
+  if (webview_) {
+    webview_->Reload();
   }
-  view_channel_->InvokeMethod(
-      "state", std::make_unique<flutter::EncodableValue>(arguments));
+}
+
+void WallpaperWindow::OpenDevTools() {
+  if (webview_) {
+    webview_->OpenDevTools();
+  }
 }
 
 void WallpaperWindow::EmbedInDesktop() {
@@ -249,9 +194,11 @@ void WallpaperWindow::EmbedInDesktop() {
   style &= ~static_cast<LONG_PTR>(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU |
                                   WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP);
   if (host != nullptr && ::GetParent(handle) == host) {
-    style |= static_cast<LONG_PTR>(WS_CHILD);
+    style |= static_cast<LONG_PTR>(WS_CHILD | WS_CLIPCHILDREN |
+                                   WS_CLIPSIBLINGS);
   } else {
-    style |= static_cast<LONG_PTR>(WS_POPUP);
+    style |= static_cast<LONG_PTR>(
+        WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
   }
   ::SetWindowLongPtr(handle, GWL_STYLE, style);
 
@@ -276,4 +223,8 @@ void WallpaperWindow::ApplyBounds() {
   ::SetWindowPos(handle, HWND_TOP, bounds.left, bounds.top,
                  bounds.right - bounds.left, bounds.bottom - bounds.top,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+
+  if (webview_) {
+    webview_->SetBounds(GetClientArea());
+  }
 }

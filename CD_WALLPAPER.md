@@ -101,3 +101,9 @@ payload body（`DesktopWallpaperPayload`，`lib/feature/player/logic/wallpaper/d
 3. **WorkerW 缺失退化**：极端桌面环境下退化为普通置底窗口（不巡检重建）。
 4. **素材不随源码分发**：克隆本仓库直接 `flutter build windows` 得到的是无素材构建（壁纸开启后页面 404）；走 CI（draft release 拉取）才有完整产物。个人使用用途。
 5. **仅 Windows**：其他平台构建不受影响，功能不可用。
+
+## 排障记录：TargetCompatibleBrowserVersion 引发的 0x80070002
+
+真机首发中壁纸窗口从未出现、且无一例外。`%LOCALAPPDATA%\bilimusic\wallpaper.log`（8ffb1b3 起落盘）显示 `CreateCoreWebView2EnvironmentWithOptions` **同步**返回 `0x80070002`（ERROR_FILE_NOT_FOUND），环境完成回调从未执行。探针矩阵（进程外 P/Invoke 复刻全部参数组合）定位：`WallpaperEnvOptions` 的 `TargetCompatibleBrowserVersion` 传了 SDK 版本号 `1.0.4314.35`，而 loader 将其视为"需要比已装 Evergreen 运行时（157.0.4341.46）更新或不同的版本"直接失败——该字段必须传 `GetAvailableCoreWebView2BrowserVersionString` 的返回值（空字符串则 E_INVALIDARG，见 v17 的 0x80070057）。修复（5b2e84c）：`StartAsync()` 先查可用运行时版本串再设置该属性，查不到就不设置。
+
+配套日志面（8ffb1b3，全部落 wallpaper.log）：窗口/嵌入/WorkerW 挂接、env 创建成败、controller 创建、每个通道方法名（pushState 限前 3 条）、page ready。

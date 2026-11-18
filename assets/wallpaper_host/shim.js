@@ -201,16 +201,42 @@
   function tryPushLyrics() {
     if (!lyricsPending) return;
     var L = window.__lyrics;
-    if (L && typeof L.demo === 'function') {
+    if (!L || typeof L.demo !== 'function') return;
+    try {
+      // 让壁纸自己的歌词引擎离线，别再去联网取词/覆盖我们推的歌词
       try {
-        L.demo(String(lyricsPending));
-        lyricsPending = null;
-        if (lyricsTimer !== null) {
-          clearInterval(lyricsTimer);
-          lyricsTimer = null;
+        if (window.CD_NET && typeof window.CD_NET.setOffline === 'function') {
+          window.CD_NET.setOffline(true);
+        } else if (typeof L.offline === 'function') {
+          L.offline(true);
         }
       } catch (e) {}
-    }
+      var lrc = String(lyricsPending);
+      var key = L.state && L.state.key ? String(L.state.key) : '';
+      // 只有引擎算出曲目 key 后才落地：既写进它自己的本地缓存，
+      // 这样它每 4s 的 sync() 命中缓存不会再清空/重取；再 demo 立刻渲染。
+      if (!key) return;
+      try {
+        var pick = 'all';
+        try {
+          if (typeof L.info === 'function') {
+            var inf = L.info() || {};
+            if (inf.pick) pick = inf.pick;
+          }
+        } catch (e) {}
+        var src = pick === 'all' ? 'local' : pick;
+        localStorage.setItem(
+          'cdly.' + key,
+          JSON.stringify({ lrc: lrc, plain: '', none: false, src: src, at: Date.now() }),
+        );
+      } catch (e) {}
+      L.demo(lrc);
+      lyricsPending = null;
+      if (lyricsTimer !== null) {
+        clearInterval(lyricsTimer);
+        lyricsTimer = null;
+      }
+    } catch (e) {}
   }
 
   function pushLyrics(lrc) {

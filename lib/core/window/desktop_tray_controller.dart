@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:bilimusic/common/util/platform_util.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -93,5 +94,8 @@ class DesktopTrayController with TrayListener, WindowListener {
     await trayManager.destroy();
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
+    // 兜底：桌面端仍挂着原生壁纸窗口/音频隔离，destroy 后进程可能不退出，
+    // 强制退出，避免“窗口和托盘都没了但音乐还在放”的僵尸进程。
+    exit(0);
   }
 }

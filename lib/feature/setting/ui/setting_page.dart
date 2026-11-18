@@ -73,15 +73,6 @@ class _SettingPageState extends ConsumerState<SettingPage> {
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => context.push('/settings/hotkeys'),
             ),
-          if (PlatformUtil.isWindows)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.wallpaper_rounded),
-              title: const Text('桌面壁纸'),
-              subtitle: Text('在桌面图标下层显示光盘播放器', style: theme.textTheme.bodySmall),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => context.push('/settings/wallpaper'),
-            ),
           FutureBuilder<int>(
             future: _cacheSizeFuture,
             builder: (context, snapshot) {

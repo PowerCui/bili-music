@@ -401,12 +401,18 @@ class _PlaybackSection extends StatelessWidget {
         Row(
           children: <Widget>[
             SizedBox(
-              width: 38,
-              child: Text(
-                formatPlayerDuration(state.position),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+              width: 40,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  formatPlayerDuration(state.position),
+                  maxLines: 1,
+                  softWrap: false,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -434,13 +440,19 @@ class _PlaybackSection extends StatelessWidget {
               ),
             ),
             SizedBox(
-              width: 38,
-              child: Text(
-                formatPlayerDuration(total),
-                textAlign: TextAlign.right,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+              width: 40,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  formatPlayerDuration(total),
+                  maxLines: 1,
+                  softWrap: false,
+                  textAlign: TextAlign.right,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),

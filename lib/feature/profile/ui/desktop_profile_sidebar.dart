@@ -5,6 +5,7 @@ import 'package:bilimusic/common/components/cached_image.dart';
 import 'package:bilimusic/common/components/common_attach_menu.dart';
 import 'package:bilimusic/common/components/login_required.dart';
 import 'package:bilimusic/common/domain/collection_kind.dart';
+import 'package:bilimusic/common/util/platform_util.dart';
 import 'package:bilimusic/common/util/toast_util.dart';
 import 'package:bilimusic/core/bili/session/bili_auth_required_exception.dart';
 import 'package:bilimusic/core/bili/session/bili_session.dart';
@@ -282,6 +283,18 @@ class _DesktopProfileSidebarState extends ConsumerState<DesktopProfileSidebar> {
                   ),
                   onPressed: () => context.go('/settings/theme'),
                 ),
+                if (PlatformUtil.isWindows) ...[
+                  const SizedBox(width: 12),
+                  // 桌面壁纸
+                  BarIconButton(
+                    icon: const Icon(Icons.wallpaper_rounded, size: 20),
+                    tooltip: '桌面壁纸',
+                    isActive: widget.currentLocation.startsWith(
+                      '/settings/wallpaper',
+                    ),
+                    onPressed: () => context.go('/settings/wallpaper'),
+                  ),
+                ],
               ],
             ),
           ),

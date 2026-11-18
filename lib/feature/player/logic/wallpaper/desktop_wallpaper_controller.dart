@@ -154,9 +154,8 @@ class DesktopWallpaperController extends _$DesktopWallpaperController {
     final String lyrics = payload.lyrics;
     if (lyrics != _lastLyrics) {
       _lastLyrics = lyrics;
-      if (lyrics.isNotEmpty) {
-        body['lyrics'] = lyrics;
-      }
+      // 即使为空也发送，让壁纸端清掉上一首的歌词/解除外部锁定。
+      body['lyrics'] = lyrics;
     }
     final int stateValue = payload.playbackState;
     final double positionSeconds = payload.positionSeconds;

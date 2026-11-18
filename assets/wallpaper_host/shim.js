@@ -187,64 +187,59 @@
   [700, 1600, 3200, 6000, 10000].forEach(function (ms) {
     setTimeout(function () {
       deliverProps();
-      try {
-        if (window.CD_NET && typeof window.CD_NET.setOffline === 'function') {
-          window.CD_NET.setOffline(true);
-        }
-      } catch (e) {}
     }, ms);
   });
 
-  var lyricsPending = null;
+  // 外部歌词：优先用壁纸引擎的 external 锁（见 assets/wallpaper/lyrics.js 补丁）。
+  // lyricsWanted: null=未设; ''=清空; 其它=要显示的 LRC 文本。
+  var lyricsWanted = null;
   var lyricsTimer = null;
 
-  function tryPushLyrics() {
-    if (!lyricsPending) return;
+  function applyLyricsNow() {
+    if (lyricsWanted === null) return true;
     var L = window.__lyrics;
-    if (!L || typeof L.demo !== 'function') return;
+    if (!L) return false;
+    var want = String(lyricsWanted);
     try {
-      // 让壁纸自己的歌词引擎离线，别再去联网取词/覆盖我们推的歌词
-      try {
-        if (window.CD_NET && typeof window.CD_NET.setOffline === 'function') {
-          window.CD_NET.setOffline(true);
-        } else if (typeof L.offline === 'function') {
-          L.offline(true);
+      if (want.length > 0) {
+        if (typeof L.ext === 'function') {
+          L.ext(want);
+          return true;
         }
-      } catch (e) {}
-      var lrc = String(lyricsPending);
-      var key = L.state && L.state.key ? String(L.state.key) : '';
-      // 只有引擎算出曲目 key 后才落地：既写进它自己的本地缓存，
-      // 这样它每 4s 的 sync() 命中缓存不会再清空/重取；再 demo 立刻渲染。
-      if (!key) return;
-      try {
-        var pick = 'all';
-        try {
-          if (typeof L.info === 'function') {
-            var inf = L.info() || {};
-            if (inf.pick) pick = inf.pick;
-          }
-        } catch (e) {}
-        var src = pick === 'all' ? 'local' : pick;
-        localStorage.setItem(
-          'cdly.' + key,
-          JSON.stringify({ lrc: lrc, plain: '', none: false, src: src, at: Date.now() }),
-        );
-      } catch (e) {}
-      L.demo(lrc);
-      lyricsPending = null;
-      if (lyricsTimer !== null) {
-        clearInterval(lyricsTimer);
-        lyricsTimer = null;
+        if (typeof L.demo === 'function') {
+          L.demo(want);
+          return true;
+        }
+        return false;
       }
-    } catch (e) {}
+      if (typeof L.extClear === 'function') {
+        L.extClear();
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function scheduleLyrics() {
+    if (lyricsTimer === null) {
+      lyricsTimer = setInterval(function () {
+        if (applyLyricsNow()) {
+          clearInterval(lyricsTimer);
+          lyricsTimer = null;
+        }
+      }, 600);
+    }
   }
 
   function pushLyrics(lrc) {
-    lyricsPending = lrc;
-    tryPushLyrics();
-    if (lyricsPending && lyricsTimer === null) {
-      lyricsTimer = setInterval(tryPushLyrics, 800);
-    }
+    lyricsWanted = String(lrc);
+    if (!applyLyricsNow()) scheduleLyrics();
+  }
+
+  function clearLyrics() {
+    lyricsWanted = '';
+    if (!applyLyricsNow()) scheduleLyrics();
   }
 
   function applyState(b) {
@@ -279,8 +274,12 @@
       if (b.duration !== undefined) S.duration = Number(b.duration) || 0;
       dispatch('Timeline');
     }
-    if (typeof b.lyrics === 'string' && b.lyrics.length > 0) {
-      pushLyrics(b.lyrics);
+    if (typeof b.lyrics === 'string') {
+      if (b.lyrics.length > 0) {
+        pushLyrics(b.lyrics);
+      } else {
+        clearLyrics();
+      }
     }
   }
 

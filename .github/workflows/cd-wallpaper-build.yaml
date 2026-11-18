@@ -119,6 +119,10 @@ jobs:
           Write-Output "--- assets/wallpaper contents ---"
           Get-ChildItem "assets\wallpaper" | ForEach-Object { Write-Output $_.Name }
 
+      - name: Patch wallpaper lyrics (external lyric lock)
+        shell: pwsh
+        run: node scripts/patch_wallpaper_lyrics.cjs
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:

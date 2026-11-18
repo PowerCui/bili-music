@@ -22,6 +22,14 @@
     state: MI.PLAYBACK_STOPPED,
   };
 
+  function dbg(tag, data) {
+    try {
+      if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+        window.chrome.webview.postMessage(JSON.stringify({ topic: 'debug', tag: tag, data: data }));
+      }
+    } catch (e) {}
+  }
+
   var CHANNELS = ['Properties', 'Thumbnail', 'Playback', 'Timeline', 'Status'];
   var subs = { Properties: [], Thumbnail: [], Playback: [], Timeline: [], Status: [] };
 
@@ -198,17 +206,26 @@
   function applyLyricsNow() {
     if (lyricsWanted === null) return true;
     var L = window.__lyrics;
-    if (!L) return false;
+    if (!L) {
+      dbg('no_engine', {});
+      return false;
+    }
     var want = String(lyricsWanted);
     try {
       if (want.length > 0) {
+        var info = null;
+        try { if (typeof L.info === 'function') info = L.info(); } catch (e) {}
         if (typeof L.ext === 'function') {
           L.ext(want);
-          return true;
+          var n = (L.state && L.state.lines) ? L.state.lines.length : 0;
+          dbg('ext', { wantLen: want.length, lines: n, mode: L.state ? L.state.mode : null, info: info, preview: want.slice(0, 60) });
+          if (n > 0) return true;
         }
         if (typeof L.demo === 'function') {
           L.demo(want);
-          return true;
+          var n2 = (L.state && L.state.lines) ? L.state.lines.length : 0;
+          dbg('demo', { wantLen: want.length, lines: n2 });
+          if (n2 > 0) return true;
         }
         return false;
       }
@@ -217,6 +234,7 @@
       }
       return true;
     } catch (e) {
+      dbg('apply_err', { msg: String((e && e.message) || e) });
       return false;
     }
   }
@@ -275,6 +293,7 @@
       dispatch('Timeline');
     }
     if (typeof b.lyrics === 'string') {
+      dbg('state_lyrics', { len: b.lyrics.length, preview: b.lyrics.slice(0, 80) });
       if (b.lyrics.length > 0) {
         pushLyrics(b.lyrics);
       } else {

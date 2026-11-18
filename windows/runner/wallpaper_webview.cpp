@@ -528,6 +528,10 @@ void WallpaperWebview::HandlePageMessage(
   }
   const std::wstring message(json);
   CoTaskMemFree(json);
+  if (message.find(L"\"topic\":\"debug\"") != std::wstring::npos) {
+    Log(L"wallpaper debug: " + message);
+    return;
+  }
   if (message.find(L"\"topic\":\"ready\"") != std::wstring::npos) {
     page_ready_ = true;
     Log(L"wallpaper webview: page ready");

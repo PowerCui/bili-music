@@ -23,7 +23,34 @@ class DesktopWallpaperPayload {
   String get subTitle => nowPlaying?.sourceLabel ?? '';
   String get genres => '';
   String get contentType => contentTypeMusic;
-  String get lyrics => nowPlaying?.lyrics ?? '';
+  String get lyrics => _qrcToLrc(nowPlaying?.lyrics ?? '');
+
+  static final RegExp _qrcLine = RegExp(r'^\[(\d+),(\d+)(?:,\d+)?\]\s*(.*)$');
+  static final RegExp _qrcAny = RegExp(r'\[\d+,\d+(?:,\d+)?\]');
+  static final RegExp _qrcWord = RegExp(
+    r'(?:\(-?\d+,-?\d+(?:,-?\d+)?\)|<-?\d+,-?\d+(?:,-?\d+)?>)',
+  );
+
+  /// 壁纸的歌词引擎只认标准 LRC（[mm:ss.cc]）。App 内部为了逐字效果会把 LRC
+  /// 转成 QRC（[起始ms,时长ms]词(ms,ms)...），这里把 QRC 还原成 LRC，
+  /// 保证桌面壁纸能解析显示；已是 LRC/纯文本则原样返回。
+  static String _qrcToLrc(String raw) {
+    final String s = raw.trim();
+    if (s.isEmpty) return '';
+    if (!_qrcAny.hasMatch(s)) return s;
+    final List<String> out = <String>[];
+    for (final String line in s.split(RegExp(r'\r?\n'))) {
+      final RegExpMatch? m = _qrcLine.firstMatch(line.trim());
+      if (m == null) continue;
+      final int startMs = int.parse(m.group(1)!);
+      final String text = m.group(3)!.replaceAll(_qrcWord, '').trim();
+      if (text.isEmpty) continue;
+      final String mm = (startMs ~/ 60000).toString().padLeft(2, '0');
+      final String ss = ((startMs % 60000) / 1000).toStringAsFixed(2).padLeft(5, '0');
+      out.add('[$mm:$ss]$text');
+    }
+    return out.join('\n');
+  }
 
   String get metadataKey => <String>[
     title,

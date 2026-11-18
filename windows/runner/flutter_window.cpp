@@ -21,6 +21,7 @@ constexpr int kNextGlyph = 3;
 constexpr char kDesktopWallpaperChannel[] = "bilimusic/desktop_wallpaper";
 constexpr UINT kWallpaperWindowClosedMessage = WM_APP + 1;
 constexpr UINT kWallpaperFailedMessage = WM_APP + 2;
+constexpr UINT kWallpaperDestroyMessage = WM_APP + 3;
 constexpr UINT_PTR kReattachWallpaperTimerId = 2;
 constexpr UINT_PTR kWallpaperPatrolTimerId = 3;
 constexpr UINT kReattachWallpaperDelayMs = 3000;
@@ -155,6 +156,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   if (message == kWallpaperFailedMessage) {
     HandleWallpaperFailed(reinterpret_cast<WallpaperWindow*>(wparam));
+    return 0;
+  }
+
+  if (message == kWallpaperDestroyMessage) {
+    DrainPendingWallpaperDestroys();
     return 0;
   }
 
@@ -442,9 +448,21 @@ void FlutterWindow::HandleWallpaperMethodCall(
 
 bool FlutterWindow::ShowWallpaper(int monitor_index) {
   WallpaperLog(L"wallpaper: show requested");
+  const RECT bounds = WallpaperWindow::MonitorBounds(monitor_index);
+
+  if (wallpaper_window_ != nullptr &&
+      wallpaper_window_->GetHandle() != nullptr &&
+      !wallpaper_window_->webview_failed()) {
+    wallpaper_window_->Restart(bounds);
+    wallpaper_active_ = true;
+    wallpaper_monitor_index_ = monitor_index;
+    WallpaperLog(L"wallpaper: window restarted");
+    SendCachedWallpaperState();
+    return true;
+  }
+
   DestroyWallpaperWindow();
 
-  const RECT bounds = WallpaperWindow::MonitorBounds(monitor_index);
   auto window = std::make_unique<WallpaperWindow>(
       bounds, [this]() { OnWallpaperReady(); },
       [this](HRESULT error) { OnWallpaperFailed(error); },
@@ -456,13 +474,15 @@ bool FlutterWindow::ShowWallpaper(int monitor_index) {
               static_cast<unsigned int>(bounds.right - bounds.left),
               static_cast<unsigned int>(bounds.bottom - bounds.top)))) {
     WallpaperLog(L"wallpaper: window Create failed");
-    window->Destroy();
+    wallpaper_window_ = std::move(window);
+    DestroyWallpaperWindow();
     wallpaper_active_ = false;
     return false;
   }
   if (window->webview_failed()) {
     WallpaperLog(L"wallpaper: webview failed at startup");
-    window->Destroy();
+    wallpaper_window_ = std::move(window);
+    DestroyWallpaperWindow();
     wallpaper_active_ = false;
     return false;
   }
@@ -479,20 +499,44 @@ bool FlutterWindow::ShowWallpaper(int monitor_index) {
 void FlutterWindow::HideWallpaper() {
   WallpaperLog(L"wallpaper: hide");
   wallpaper_active_ = false;
-  DestroyWallpaperWindow();
+  if (wallpaper_window_ != nullptr) {
+    wallpaper_window_->Shutdown();
+    wallpaper_window_->Hide();
+  }
+  wallpaper_ready_ = false;
   ResetWallpaperState();
 }
 
 void FlutterWindow::DestroyWallpaperWindow() {
+  wallpaper_ready_ = false;
   if (!wallpaper_window_) {
-    wallpaper_ready_ = false;
     return;
   }
   destroying_wallpaper_ = true;
-  wallpaper_window_->Destroy();
-  wallpaper_window_.reset();
+  wallpaper_window_->Shutdown();
+  wallpaper_window_->Hide();
+  pending_wallpaper_destroys_.push_back(std::move(wallpaper_window_));
+  wallpaper_window_ = nullptr;
   destroying_wallpaper_ = false;
-  wallpaper_ready_ = false;
+  const HWND handle = GetHandle();
+  if (handle != nullptr) {
+    ::PostMessage(handle, kWallpaperDestroyMessage, 0, 0);
+  }
+}
+
+void FlutterWindow::DrainPendingWallpaperDestroys() {
+  if (pending_wallpaper_destroys_.empty()) {
+    return;
+  }
+  destroying_wallpaper_ = true;
+  for (auto& window : pending_wallpaper_destroys_) {
+    if (window != nullptr) {
+      window->Destroy();
+    }
+    window.reset();
+  }
+  pending_wallpaper_destroys_.clear();
+  destroying_wallpaper_ = false;
 }
 
 void FlutterWindow::PushWallpaperState(
@@ -560,10 +604,7 @@ void FlutterWindow::HandleWallpaperWindowClosed(WallpaperWindow* source) {
   if (!wallpaper_window_ || wallpaper_window_.get() != source) {
     return;
   }
-  destroying_wallpaper_ = true;
-  wallpaper_window_.reset();
-  destroying_wallpaper_ = false;
-  wallpaper_ready_ = false;
+  DestroyWallpaperWindow();
   if (wallpaper_channel_) {
     wallpaper_channel_->InvokeMethod(
         "windowClosed", std::make_unique<flutter::EncodableValue>());
@@ -575,9 +616,7 @@ void FlutterWindow::HandleWallpaperFailed(WallpaperWindow* source) {
     return;
   }
   wallpaper_active_ = false;
-  destroying_wallpaper_ = true;
-  wallpaper_window_.reset();
-  destroying_wallpaper_ = false;
+  DestroyWallpaperWindow();
   ResetWallpaperState();
   if (wallpaper_channel_) {
     wallpaper_channel_->InvokeMethod(

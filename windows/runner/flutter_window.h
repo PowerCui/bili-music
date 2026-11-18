@@ -54,6 +54,7 @@ class FlutterWindow : public Win32Window {
   void HandleWallpaperWindowClosed(WallpaperWindow* source);
   void HandleWallpaperFailed(WallpaperWindow* source);
   void CheckWallpaperHost();
+  void DrainPendingWallpaperDestroys();
 
   // The project to run.
   flutter::DartProject project_;
@@ -78,6 +79,7 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       wallpaper_channel_;
   std::unique_ptr<WallpaperWindow> wallpaper_window_;
+  std::vector<std::unique_ptr<WallpaperWindow>> pending_wallpaper_destroys_;
   std::string wallpaper_payload_;
   bool wallpaper_active_ = false;
   int wallpaper_monitor_index_ = 0;

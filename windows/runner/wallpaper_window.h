@@ -33,6 +33,10 @@ class WallpaperWindow : public Win32Window {
   void SendState(const std::string& payload);
   void Reload();
   void OpenDevTools();
+  void Shutdown();
+  void Restart(const RECT& bounds);
+  void Hide();
+  void Destroy();
   bool webview_failed() const { return webview_failed_; }
 
  protected:
@@ -44,6 +48,7 @@ class WallpaperWindow : public Win32Window {
  private:
   void EmbedInDesktop();
   void ApplyBounds();
+  void StartWebview();
 
   RECT bounds_;
   ReadyHandler on_ready_;

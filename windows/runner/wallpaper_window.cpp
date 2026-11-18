@@ -127,6 +127,15 @@ bool WallpaperWindow::OnCreate() {
 
   WallpaperLog(L"wallpaper window: embedded, starting webview");
 
+  StartWebview();
+
+  return true;
+}
+
+void WallpaperWindow::StartWebview() {
+  if (webview_) {
+    return;
+  }
   webview_ = std::make_shared<WallpaperWebview>(
       GetHandle(), on_ready_, [this](HRESULT error) {
         webview_failed_ = true;
@@ -135,8 +144,38 @@ bool WallpaperWindow::OnCreate() {
         }
       });
   webview_->StartAsync();
+}
 
-  return true;
+void WallpaperWindow::Shutdown() {
+  if (webview_) {
+    webview_->Destroy();
+  }
+  webview_.reset();
+}
+
+void WallpaperWindow::Restart(const RECT& bounds) {
+  HWND handle = GetHandle();
+  if (handle == nullptr) {
+    return;
+  }
+  bounds_ = bounds;
+  webview_failed_ = false;
+  EmbedInDesktop();
+  ApplyBounds();
+  ::ShowWindow(handle, SW_SHOWNOACTIVATE);
+  StartWebview();
+}
+
+void WallpaperWindow::Hide() {
+  HWND handle = GetHandle();
+  if (handle != nullptr) {
+    ::ShowWindow(handle, SW_HIDE);
+  }
+}
+
+void WallpaperWindow::Destroy() {
+  Shutdown();
+  Win32Window::Destroy();
 }
 
 void WallpaperWindow::OnDestroy() {
